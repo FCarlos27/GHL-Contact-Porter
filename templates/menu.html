@@ -51,6 +51,17 @@
     <h1>Welcome to CarGet Motors Calendar</h1>
 
     <form method="POST" action="/menu" id="menuForm">
+        <label for="location_id">Select Location:</label>
+            <select name="location_id" id="location_id">
+                {% for loc in locations %}
+                    {% if loc.id == selected_location %}
+                        <option value="{{ loc.id }}" selected>{{ loc.name }}</option>
+                    {% else %}
+                        <option value="{{ loc.id }}">{{ loc.name }}</option>
+                    {% endif %}
+                {% endfor %}
+            </select>
+            <br><br>
         <label for="option">Choose an option:</label>
         <select name="option" id="option" onchange="toggleDateInput()">
             <option value="1">View today's appointments</option>

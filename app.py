@@ -1,15 +1,15 @@
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, redirect, session
 from datetime import datetime
 from services.ghl_api import (
     ensure_location_name,
-    fetch_calendar_events
+    fetch_calendar_events,
 )
 from services.gist_storage import (
     save_tokens,
-    get_tokens,
-    get_all_location_ids,
+    get_all_locations_name_id,
     get_calendar_id,
-    get_location_data
+    get_location_data,
+    token_is_stale
     )
 from services.oauth import (
     exchange_code_for_tokens,
@@ -17,69 +17,62 @@ from services.oauth import (
 )
 from services.appts import (
     compute_time_range,
-    extract_appointments
+    create_appointments_html,
+    extract_contacts_scheduled
 )
 
-
 app = Flask(__name__)
+app.secret_key = "a-strong-secret-key"
 
 
-@app.route("/")
+@app.route("/", methods=["GET", "POST"])
+def select_location():
+    locations = get_all_locations_name_id()
+
+    if request.method == "POST":
+        chosen = request.form.get("location_id")
+        loc_data = get_location_data(chosen)
+
+        # Refresh only if needed
+        if token_is_stale(loc_data.get("last_refresh")):
+            new_access = refresh_if_needed(chosen, loc_data.get("refresh_token"))
+            session["access_token"] = new_access
+        else:
+            session["access_token"] = loc_data.get("access_token")
+
+        session["location_id"] = chosen
+        session["calendar_id"] = loc_data.get("calendar_id")
+        session["location_name"] = loc_data.get("name")
+
+        return redirect("/menu")
+
+    return render_template("select_location.html", locations=locations)
+
 @app.route("/menu", methods=["GET", "POST"])
 def menu():
+    if "location_id" not in session:
+        return redirect("/")
+
+    selected_location = session["location_id"]
+    access_token= session["access_token"]
+    calendar_id = session["calendar_id"]
+
     title = ""
-    appointments = None
     html = ""
-
-    # Load all locations from Gist
-    location_ids = get_all_location_ids()
-
-    # Build list of {id, name}
-    locations = []
-    for loc_id in location_ids:
-        loc_data = get_location_data(loc_id)
-        locations.append({"id": loc_id, "name": loc_data["name"]})
-    
-    # Determine selected location
-    selected_location = request.form.get("location_id") or locations[0]["id"]
-
-    # Load tokens from Gist
-    access_token, refresh_token = get_tokens(selected_location)
-
-    # Load calendar_id
-    calendar_id = get_calendar_id(selected_location)
 
     if request.method == "POST":
         option = request.form.get("option")
         date_input = request.form.get("date", "")
 
         # Determine date range
-        if option == "1":
-            title = "Appointments for Today"
-            start, end = compute_time_range("today")
+        if option == "1" and date_input:
+            title = f"Appointments for {date_input}"
+            start, end = compute_time_range("specific", date_input)
 
         elif option == "2":
-            title = "Appointments for Tomorrow"
-            start, end = compute_time_range("tomorrow")
+            return redirect("/appointments/contacts-for-day")
 
-        elif option == "3" and date_input:
-            try:
-                curr_year = datetime.now().year
-                formatted_date = f"{curr_year}-{date_input}"
-                datetime.strptime(formatted_date, "%Y-%m-%d")
-
-                title = f"Appointments for {date_input}"
-                start, end = compute_time_range("specific", formatted_date)
-
-            except ValueError:
-                return render_template(
-                    "menu.html",
-                    data="<p style='color:red;'>Invalid date format. Please use MM-DD.</p>",
-                    curr_year=datetime.now().year,
-                    title="Invalid Date"
-                )
-
-        elif option == "4":
+        elif option == "3":
             return "Exiting the program."
 
         # Fetch events
@@ -91,19 +84,8 @@ def menu():
             end
         )
 
-        # Handle expired token
-        if response.status_code == 401:
-            access_token = refresh_if_needed(selected_location)
-            response = fetch_calendar_events(
-                selected_location,
-                calendar_id,
-                access_token,
-                start,
-                end
-            )
-
         # Extract clean appointment data
-        appointments = extract_appointments(response.json())
+        appointments = create_appointments_html(response.json())
 
         for i, desc in enumerate(appointments, start=1):
             html += f"{i}. {desc}<br><br>"
@@ -114,7 +96,8 @@ def menu():
         data=html,
         curr_year=datetime.now().year,
         title=title,
-        locations=locations
+        selected_location=selected_location,
+        location_name=session["location_name"]
     )
 
 @app.route("/oauth/callback")
@@ -129,9 +112,33 @@ def oauth_callback():
    
     # Save location name (fetches from GHL if missing)
     ensure_location_name(location_id)
-    
 
     return f"App installed successfully for location: {location_id}"
+
+@app.route("/appointments/contacts-for-day", methods=["GET", "POST"])
+def contacts_for_day():
+    if request.method == "GET":
+        return render_template("contacts_for_day.html")
+
+    date_str = request.form.get("date")
+    if not date_str:
+        return "Missing date", 400
+
+    # Fetch appointments for that date (your existing logic)
+    json_data = fetch_calendar_events(session["location_id"], session["calendar_id"],
+                                      session["access_token"], *compute_time_range("specific", date_str)).json()
+
+
+    # Extract name + phone from notes
+    contacts = extract_contacts_scheduled(json_data)
+
+    return render_template(
+        "contacts_for_day.html",
+        date=date_str,
+        contacts=contacts
+    )
+
+
 
 
 if __name__ == '__main__':

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Daily Appointment Contacts</title>
+    <style>
+        body {
+            background-color: #0a0a0a;
+            font-family: Arial, sans-serif;
+            color: white;
+            text-align: center;
+            padding-top: 40px;
+        }
+        .container {
+            background: #ffffff;
+            color: #000000;
+            padding: 25px;
+            border-radius: 8px;
+            width: 360px;
+            margin: auto;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+        input[type="date"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: 1px solid #333;
+        }
+        input[type="submit"] {
+            padding: 10px 20px;
+            border: none;
+            background-color: #222;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        input[type="submit"]:hover {
+            background-color: #444;
+        }
+        .results {
+            margin-top: 25px;
+            text-align: left;
+        }
+        .contact-box {
+            background: #f2f2f2;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        .contact-box strong {
+            color: #000;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Get Contacts for a Day</h2>
+
+    <form method="POST" action="/appointments/contacts-for-day">
+        <label for="date">Select a date:</label>
+        <input type="date" id="date" name="date" required>
+        <input type="submit" value="Fetch Contacts">
+    </form>
+
+    {% if contacts %}
+    <div class="results">
+        <h3>Contacts for {{ date }}</h3>
+
+        {% for c in contacts %}
+        <div class="contact-box">
+            <strong>Name:</strong> {{ c.name }}<br>
+            <strong>Phone:</strong> {{ c.phone }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+</body>
+</html>

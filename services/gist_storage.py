@@ -1,6 +1,7 @@
 import requests
 import json
 from utils.config import GIST_TOKEN, GIST_ID
+from datetime import datetime, timezone, timedelta
 
 # -----------------------------
 # Internal helpers
@@ -53,10 +54,19 @@ def _update_gist(data):
 # Public API
 # -----------------------------
 
-def get_all_location_ids():
-    """Return all the location IDs stored."""
+def get_all_locations_name_id():
+    """Return a list of {'id': ..., 'name': ...} for all stored locations."""
     data = _get_gist()
-    return list(data.keys())
+
+    locations = []
+    for loc_id, loc_data in data.items():
+        locations.append({
+            "id": loc_id,
+            "name": loc_data.get("name", "Unknown")
+        })
+
+    return locations
+
 
 def get_location_data(location_id):
     """
@@ -91,6 +101,7 @@ def save_tokens(location_id, access_token, refresh_token):
 
     data[location_id]["access_token"] = access_token
     data[location_id]["refresh_token"] = refresh_token
+    data[location_id]["last_refresh"] = datetime.now(timezone.utc).isoformat()
 
     _update_gist(data)
 
@@ -125,3 +136,15 @@ def update_access_token(location_id, new_access_token):
     data[location_id]["access_token"] = new_access_token
 
     _update_gist(data)
+
+def token_is_stale(last_refresh):
+    if not last_refresh:
+        return True
+
+    try:
+        last = datetime.fromisoformat(last_refresh)
+    except ValueError:
+        return True
+
+    now = datetime.now(timezone.utc)
+    return now - last > timedelta(hours=24)

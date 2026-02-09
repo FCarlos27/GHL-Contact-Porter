@@ -60,14 +60,11 @@ def refresh_access_token(refresh_token):
     return data.get("access_token"), data.get("refresh_token")
 
 
-def refresh_if_needed(location_id):
+def refresh_if_needed(location_id, refresh_token):
     """
     Refresh the token for a location and update the Gist.
     Returns the new access token.
     """
-
-    access_token, refresh_token = get_tokens(location_id)
-
     if not refresh_token:
         raise Exception(f"No refresh token found for location {location_id}")
 
@@ -77,3 +74,4 @@ def refresh_if_needed(location_id):
     save_tokens(location_id, new_access, new_refresh)
 
     return new_access
+

@@ -1,30 +1,20 @@
-import requests
 import re
 from datetime import timedelta, date, datetime, time
 
 
-def compute_time_range(range_type, date_input=None):
-    """Return start and end timestamps (ms) for today, tomorrow, or a specific date."""
+def compute_time_range(date_input=None):
+    """Return start and end timestamps (ms) for a specific date."""
     
-    if range_type == "today":
-        start = datetime.combine(date.today(), time(10))
-        end = start + timedelta(hours=11)
-
-    elif range_type == "tomorrow":
-        start = datetime.combine(date.today() + timedelta(days=1), time(10))
-        end = start + timedelta(hours=11)
-
-    elif range_type == "specific":
+    try:
         selected = datetime.strptime(date_input, "%Y-%m-%d").date()
         start = datetime.combine(selected, time())
         end = datetime.combine(selected, time(20))
-
-    else:
+    except:
         raise ValueError("Invalid range type")
 
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
-def extract_appointments(json_data):
+def create_appointments_html(json_data):
     """Return a clean list of appointment objects ready for rendering."""
     
     descriptions = []
@@ -38,8 +28,6 @@ def extract_appointments(json_data):
         descriptions.append(description)
 
     return descriptions
-
-import re
 
 def clean_html_description(notes):
     if not notes:
@@ -82,6 +70,74 @@ def clean_html_description(notes):
     final = f"{notes}<br>"
 
     return final
+
+def extract_contacts_scheduled(json_data):
+    """Return list of contacts scheduled for a date"""
+    contacts = []
+
+    for event in json_data.get("events", []):
+        if event["appointmentStatus"] not in ["confirmed", "showed"]:
+            continue
+
+        notes = event.get("notes", "")
+        extracted = extract_contact_from_appointment(notes)
+
+        # Only append if at least name or phone exists
+        if extracted["name"] or extracted["phone"]:
+            contacts.append(extracted)
+
+    return contacts
+
+def extract_contact_from_appointment(notes):
+    """Return the client's name and phone from an appointment description"""
+
+    if not notes:
+        return {"name": None, "phone": None}
+
+    # Split into non-empty trimmed lines
+    lines = [line.strip() for line in notes.split("\n") if line.strip()]
+
+    # Remove optional NEW APPOINTMENT line
+    if lines and re.fullmatch(r"\*?NEW APPOINTMENT\*?", lines[0], re.IGNORECASE):
+        lines = lines[1:]
+
+    # Name = first remaining line
+    name = lines[0] if lines else None
+
+    # Phone regex
+    phone_regex = re.compile(r"\+?\(?\d[\d\-\s\(\)]{7,}\d")
+    phone = None 
+    for line in lines: 
+        m = phone_regex.search(line) 
+        if m: 
+            phone = m.group(0) 
+            break
+
+
+    return {"name": name, "phone": phone}
+
+
+def format_us_phone(phone):
+    """Formats the phone number into (xxx) xxx-xxxx"""
+    digits = re.sub(r"\D", "", phone)  # keep only numbers
+
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]  # remove country code
+
+    if len(digits) != 10:
+        return phone  # fallback if number is malformed
+
+    area, prefix, line = digits[:3], digits[3:6], digits[6:]
+    return f"({area}) {prefix}-{line}"
+
+def capitalize_name(name):
+    """Helper function for to capitalize clients names"""
+    if not name:
+        return ""
+    return name.strip().capitalize()
+
+
+
 
 
 

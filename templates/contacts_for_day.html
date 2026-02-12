@@ -67,7 +67,8 @@
 
     {% if contacts %}
     <div class="results">
-        <h3>Contacts for {{ date }}</h3>
+        {% set y, m, d = date.split('-') %}
+        <h3>Contacts for {{ m }}-{{ d }}-{{ y }}</h3>
 
         {% for c in contacts %}
         <div class="contact-box">
@@ -76,8 +77,11 @@
         </div>
         {% endfor %}
     </div>
+
+    {% elif date %}
+        <p>No contacts found for this date.</p>
     {% endif %}
-</div>
+    </div>
 
 </body>
 </html>

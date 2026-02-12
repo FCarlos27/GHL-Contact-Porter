@@ -1,16 +1,21 @@
 import re
-from datetime import timedelta, date, datetime, time
+from datetime import datetime, time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-
-def compute_time_range(date_input=None):
-    """Return start and end timestamps (ms) for a specific date."""
-    
+def compute_time_range(date_input=str, tz: str="UTC") -> tuple[int, int]:
+    """Returns the start time and end time for the GHL API payload."""
     try:
         selected = datetime.strptime(date_input, "%Y-%m-%d").date()
-        start = datetime.combine(selected, time())
-        end = datetime.combine(selected, time(20))
-    except:
-        raise ValueError("Invalid range type")
+        zone = ZoneInfo(tz)
+    except ZoneInfoNotFoundError:
+        raise ValueError(
+            f"Timezone '{tz}' not found. On Windows run: pip install tzdata"
+        )
+    except Exception:
+        raise ValueError("Invalid date format. Use YYYY-MM-DD")
+
+    start = datetime.combine(selected, time(0, 0, 0), tzinfo=zone)
+    end = datetime.combine(selected, time(23, 59, 59, 999000), tzinfo=zone)
 
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
 
@@ -30,6 +35,7 @@ def create_appointments_html(json_data):
     return descriptions
 
 def clean_html_description(notes):
+    """Returns and HTML string following a given pattern"""
     if not notes:
         return "Appointment's description is empty."
 
@@ -88,7 +94,7 @@ def extract_contacts_scheduled(json_data):
 
     return contacts
 
-def extract_contact_from_appointment(notes):
+def extract_contact_from_appointment(notes: str) -> dict:
     """Return the client's name and phone from an appointment description"""
 
     if not notes:
@@ -117,7 +123,7 @@ def extract_contact_from_appointment(notes):
     return {"name": name, "phone": phone}
 
 
-def format_us_phone(phone):
+def format_us_phone(phone:int) -> int:
     """Formats the phone number into (xxx) xxx-xxxx"""
     digits = re.sub(r"\D", "", phone)  # keep only numbers
 
@@ -130,11 +136,7 @@ def format_us_phone(phone):
     area, prefix, line = digits[:3], digits[3:6], digits[6:]
     return f"({area}) {prefix}-{line}"
 
-def capitalize_name(name):
-    """Helper function for to capitalize clients names"""
-    if not name:
-        return ""
-    return name.strip().capitalize()
+
 
 
 

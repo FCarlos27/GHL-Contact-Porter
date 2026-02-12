@@ -3,3 +3,4 @@ __pycache__/
 pyvenv.cfg
 venv/
 GHL-SheetsProject - Shortcut.lnk
+utils/credentials.json

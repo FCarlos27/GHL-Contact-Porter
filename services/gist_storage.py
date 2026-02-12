@@ -126,6 +126,20 @@ def save_location_name(location_id, name):
     data[location_id]["name"] = name
     _update_gist(data)
 
+def save_location_sheet(location_id, sheet_id):
+    """Save the location's appointments sheet id for a specific location."""
+    data = _get_gist()
+
+    if location_id not in data:
+        data[location_id] = {}
+
+    if "sheet_id" not in data[location_id]:
+        data[location_id]["sheet_id"] = {}
+
+    data[location_id]["sheet_id"] = sheet_id
+
+    _update_gist
+
 def update_access_token(location_id, new_access_token):
     """Update only the access token after a refresh."""
     data = _get_gist()

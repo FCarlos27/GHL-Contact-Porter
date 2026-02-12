@@ -7,7 +7,6 @@ from services.ghl_api import (
 from services.gist_storage import (
     save_tokens,
     get_all_locations_name_id,
-    get_calendar_id,
     get_location_data,
     token_is_stale
     )
@@ -19,6 +18,11 @@ from services.appts import (
     compute_time_range,
     create_appointments_html,
     extract_contacts_scheduled
+)
+from services.sheets_api import (
+    insert_contacts_after_row,
+    select_worksheet,
+    get_location_sheet
 )
 
 app = Flask(__name__)
@@ -43,6 +47,7 @@ def select_location():
         session["location_id"] = chosen
         session["calendar_id"] = loc_data.get("calendar_id")
         session["location_name"] = loc_data.get("name")
+        session["sheet_id"] = loc_data.get("sheet_id")
 
         return redirect("/menu")
 
@@ -59,15 +64,16 @@ def menu():
 
     title = ""
     html = ""
+    
 
     if request.method == "POST":
         option = request.form.get("option")
         date_input = request.form.get("date", "")
-
+    
         # Determine date range
         if option == "1" and date_input:
             title = f"Appointments for {date_input}"
-            start, end = compute_time_range("specific", date_input)
+            start, end = compute_time_range(date_input, "America/New_York")
 
         elif option == "2":
             return redirect("/appointments/contacts-for-day")
@@ -118,28 +124,35 @@ def oauth_callback():
 @app.route("/appointments/contacts-for-day", methods=["GET", "POST"])
 def contacts_for_day():
     if request.method == "GET":
-        return render_template("contacts_for_day.html")
+        return render_template(
+            "contacts_for_day.html",
+            date=None,
+            contacts=[]
+        )
 
     date_str = request.form.get("date")
     if not date_str:
         return "Missing date", 400
 
-    # Fetch appointments for that date (your existing logic)
-    json_data = fetch_calendar_events(session["location_id"], session["calendar_id"],
-                                      session["access_token"], *compute_time_range("specific", date_str)).json()
+    json_data = fetch_calendar_events(
+        session["location_id"],
+        session["calendar_id"],
+        session["access_token"],
+        *compute_time_range(date_str, "America/New_York")
+    ).json()
 
+    contacts = extract_contacts_scheduled(json_data) or []
 
-    # Extract name + phone from notes
-    contacts = extract_contacts_scheduled(json_data)
+    if contacts:
+        sheet = get_location_sheet(session["sheet_id"])
+        ws = select_worksheet(sheet)
+        insert_contacts_after_row(ws, date_str, contacts)
 
     return render_template(
         "contacts_for_day.html",
         date=date_str,
         contacts=contacts
     )
-
-
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -89,11 +89,19 @@
 
     <script>
         function toggleDateInput() {
-            var option = document.getElementById("option").value;
-            var dateField = document.getElementById("date-container");
-            dateField.style.display = (option === "1") ? "block" : "none";
-        }
+            const option = document.getElementById("option").value;
+            const dateInput = document.getElementById("date");
+            const dateContainer = document.getElementById("date-container");
 
+            if (option === "1") {
+                dateContainer.style.display = "block";
+                dateInput.required = true;
+            } else {
+                dateContainer.style.display = "none";
+                dateInput.required = false;
+                dateInput.value = ""; // clear it
+            }
+        }
         function copyText() {
             var textToCopy = document.getElementById("textToCopy").innerText;
             navigator.clipboard.writeText(textToCopy).then(function () {

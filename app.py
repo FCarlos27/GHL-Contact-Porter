@@ -21,6 +21,7 @@ from services.appts import (
 )
 from services.sheets_api import (
     insert_contacts_after_row,
+    insert_contacts_for_month,
     select_worksheet,
     get_location_sheet
 )
@@ -76,7 +77,7 @@ def menu():
             start, end = compute_time_range(date_input, "America/New_York")
 
         elif option == "2":
-            return redirect("/appointments/contacts-for-day")
+            return redirect("/contacts/insert-in-sheet/day")
 
         elif option == "3":
             return "Exiting the program."
@@ -121,7 +122,7 @@ def oauth_callback():
 
     return f"App installed successfully for location: {location_id}"
 
-@app.route("/appointments/contacts-for-day", methods=["GET", "POST"])
+@app.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
 def contacts_for_day():
     if request.method == "GET":
         return render_template(
@@ -153,6 +154,48 @@ def contacts_for_day():
         date=date_str,
         contacts=contacts
     )
+
+@app.route("/contacts/insert-in-sheet/month")
+def contacts_for_month():
+
+    tz = "America/New_York"
+
+    # Get current month in YYYY-MM format
+    today = datetime.now()
+    month_str = today.strftime("%Y-%m")
+
+    # Compute start/end timestamps
+    start_ms, end_ms = compute_time_range(month_str, tz, mode="month")
+
+    # Fetch events
+    response = fetch_calendar_events(
+        session["location_id"],
+        session["calendar_id"],
+        session["access_token"],
+        start_ms,
+        end_ms
+    )
+
+    json_data = response.json()
+
+    # Extract contacts
+    contacts = extract_contacts_scheduled(json_data, month=True)
+
+    if not contacts:
+        return {"message": "No contacts found for this month."}, 200
+
+    # Insert into sheet
+    sheet = get_location_sheet(session["sheet_id"])
+    ws = select_worksheet(sheet)
+
+    inserted = insert_contacts_for_month(ws, contacts)
+
+    return {
+        "inserted_count": len(inserted),
+        "month": month_str
+    }, 200
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

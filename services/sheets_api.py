@@ -1,4 +1,6 @@
 import gspread
+from collections import defaultdict
+from datetime import datetime
 from typing import Dict, List
 from utils.formatting import format_us_phone, normalize_date
 from google.oauth2.service_account import Credentials
@@ -32,102 +34,122 @@ def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gs
 
     raise TypeError("identifier must be None, int (gid), or str (worksheet name)")
 
-def insert_contacts_after_row(worksheet: gspread.Worksheet,date: str,
-    contacts: List[Dict[str, str]]) -> List[int]:
-    """
-    Inserts multiple contacts (name, phone) into the worksheet.
-    Returns a list of row numbers where each contact was inserted.
-    """
-    
+def insert_contacts_for_month(
+    worksheet: gspread.Worksheet,
+    contacts: List[Dict[str, str]]
+) -> List[int]:
+
     inserted_rows = []
 
-    start_row, is_mid = find_last_row_for_date(worksheet, date)
+    grouped = defaultdict(list)
 
-    # Extract target day
-    target_day = int(normalize_date(date).split("/")[1])
+    for contact in contacts:
+        if not contact.get("date"):
+            continue
 
-    # Determine if the date actually exists in the sheet
-    date_exists = False
-    if start_row is not None:
-        try:
-            existing_day = int(worksheet.col_values(4)[start_row - 1].split("/")[1])
-            date_exists = (existing_day == target_day)
-        except:
-            date_exists = False
+        grouped[contact["date"]].append(contact)
 
-    # Base insertion point
-    if start_row is None:
-        current_row = len(worksheet.col_values(1)) + 1
-    else:
-        current_row = start_row + 1
-
-    # Insert separation row BEFORE only when this is a new date block
-    if not date_exists and not is_mid:
-        worksheet.insert_row(None, index=current_row)
-        current_row += 1
-
-    # Insert contacts
-    for entry in contacts:
-        name = entry.get("name", "")
-        phone = entry.get("phone", "")
-
-        worksheet.insert_row(
-            [name, format_us_phone(phone), None, normalize_date(date)],
-            index=current_row,
-            inherit_from_before=True,
-            value_input_option="USER_ENTERED"
+    # Sort chronologically
+    sorted_dates = sorted(
+        grouped.keys(),
+        key=lambda d: datetime.strptime(d, "%m/%d/%Y")
+    )
+    
+    for date in sorted_dates:
+        rows = insert_contacts_after_row(
+            worksheet,
+            date,
+            grouped[date]
         )
-        inserted_rows.append(current_row)
-        current_row += 1
-
-    # Insert ONE separation row after only when this is a new date block
-    if not date_exists:
-        worksheet.insert_row(None, index=current_row)
+        inserted_rows.extend(rows)
 
     return inserted_rows
 
+def insert_contacts_after_row(
+    worksheet: gspread.Worksheet,
+    date: str,
+    contacts: List[Dict[str, str]]
+) -> List[int]:
 
-def find_last_row_for_date(ws: gspread.worksheet, target_date: str) -> tuple:
-    """Returns the correct insertion row for a given date by scanning the sheet’s date column, 
-    finding the last row with the same day, or—if no match exists—locating the next larger day so the new entry is placed in proper chronological order."""
-    
-    # target_date is MM/DD/YYYY
-    target_day = int(normalize_date(target_date).split("/")[1])
+    inserted_rows = []
 
-    dates = ws.col_values(4)  # column D
+    start_row, _= find_insertion_row(worksheet, date)
+    current_row = start_row + 1
 
-    # Extract day numbers
-    day_numbers = []
-    for d in dates:
-        try:
-            day_numbers.append(int(d.split("/")[1]))
-        except:
-            day_numbers.append(None)
+    already = already_inserted_for_date(worksheet)
+    existing_phones = already.get(date, set())
+
+    for entry in contacts:
+        name = entry.get("name", "")
+        phone = format_us_phone(entry.get("phone", ""))
+
+        if phone in existing_phones:
+            continue
+
+        worksheet.insert_row(
+            [name, phone, None, date],
+            index=current_row,
+            inherit_from_before=True if current_row > 2 else None,
+            value_input_option="USER_ENTERED"
+        )
+
+        inserted_rows.append(current_row)
+        current_row += 1
+
+    return inserted_rows
+
+def find_insertion_row(ws: gspread.Worksheet, target_date: str) -> tuple[int, bool]:
+    """
+    Returns:
+        (row_index, date_exists)
+
+    row_index → the row AFTER which new rows should be inserted
+    date_exists → whether this exact date already exists
+    """
+
+    dates = ws.col_values(4)
 
     last_match = None
     next_larger = None
 
-    for i, day in enumerate(day_numbers):
-        if day is None:
+    target_date = datetime.strptime(target_date, "%m/%d/%Y").date()
+    
+    for i, value in enumerate(dates):
+        try:
+            current_dt = datetime.strptime(value, "%m/%d/%Y").date()
+        except:
             continue
 
-        # Track last exact match
-        if day == target_day:
+        if current_dt == target_date:
             last_match = i + 1
 
-        # First larger day
-        if day > target_day and next_larger is None:
+        elif current_dt > target_date and next_larger is None:
             next_larger = i + 1
 
-    # insert after last match
     if last_match is not None:
-        return last_match, False
+        return last_match, True
 
-    # no match, but a larger day exists → mid insertion
     if next_larger is not None:
-        # Insert BEFORE the larger date block
-        return next_larger - 1, True
+        return next_larger - 1, False
 
-    # no match and no larger day → append at bottom, not mid
     return len(dates), False
 
+
+def already_inserted_for_date(ws: gspread.Worksheet) -> dict[str, set[str]]:
+    """
+    Returns a dict mapping:
+    {
+        "MM/DD/YYYY": {"+15551234567", "+15559876543", ...}
+    }
+    """
+    dates = ws.col_values(4)   # column D
+    phones = ws.col_values(2) # column B
+
+    result = defaultdict(set)
+
+    for d, p in zip(dates, phones):
+        if not d or not p:
+            continue
+        result[d].add(p.strip())
+
+    return dict(result)

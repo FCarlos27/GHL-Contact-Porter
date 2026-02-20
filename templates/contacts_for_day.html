@@ -57,9 +57,9 @@
 <body>
 
 <div class="container">
-    <h2>Get Contacts for a Day</h2>
+    <h2>Get Contacts for insertion</h2>
 
-    <form method="POST" action="/appointments/contacts-for-day">
+    <form method="POST" action="/contacts/insert-in-sheet/day">
         <label for="date">Select a date:</label>
         <input type="date" id="date" name="date" required>
         <input type="submit" value="Fetch Contacts">
@@ -69,6 +69,7 @@
     <div class="results">
         {% set y, m, d = date.split('-') %}
         <h3>Contacts for {{ m }}-{{ d }}-{{ y }}</h3>
+        <h5>(duplicated contacts in this date are not inserted)</h5>
 
         {% for c in contacts %}
         <div class="contact-box">

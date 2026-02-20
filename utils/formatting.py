@@ -14,5 +14,8 @@ def format_us_phone(phone:int) -> int:
     return f"({area}) {prefix}-{line}"
 
 def normalize_date(iso: str) -> str:
-    y, m, d = iso.split("-")
+    """Returns date string with format MM/DD/YYYY"""
+    # Accept both "-" and "/" by replacing slashes first
+    parts = iso.replace("/", "-").split("-")
+    y, m, d = parts
     return f"{int(m)}/{int(d)}/{y}"

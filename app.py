@@ -14,18 +14,20 @@ from services.oauth import (
     exchange_code_for_tokens,
     refresh_if_needed
 )
-from services.appts import (
-    compute_time_range,
+from services.appts_format import (
     create_appointments_html,
     extract_contacts_scheduled
 )
 from services.sheets_api import (
-    insert_contacts_after_row,
-    insert_contacts_for_month,
+    insert_day_contatcs,
+    insert_month_contacts,
     select_worksheet,
     get_location_sheet
 )
-
+from utils.formatting import (
+    normalize_date,
+    compute_time_range
+)
 app = Flask(__name__)
 app.secret_key = "a-strong-secret-key"
 
@@ -80,6 +82,9 @@ def menu():
             return redirect("/contacts/insert-in-sheet/day")
 
         elif option == "3":
+            return redirect ("/contacts/insert-in-sheet/month")
+        
+        elif option == "4":
             return "Exiting the program."
 
         # Fetch events
@@ -147,7 +152,7 @@ def contacts_for_day():
     if contacts:
         sheet = get_location_sheet(session["sheet_id"])
         ws = select_worksheet(sheet)
-        insert_contacts_after_row(ws, date_str, contacts)
+        insert_day_contatcs(ws, normalize_date(date_str), contacts)
 
     return render_template(
         "contacts_for_day.html",
@@ -188,7 +193,7 @@ def contacts_for_month():
     sheet = get_location_sheet(session["sheet_id"])
     ws = select_worksheet(sheet)
 
-    inserted = insert_contacts_for_month(ws, contacts)
+    inserted = insert_month_contacts(ws, contacts)
 
     return {
         "inserted_count": len(inserted),

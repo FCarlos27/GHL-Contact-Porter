@@ -34,13 +34,26 @@ def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gs
 
     raise TypeError("identifier must be None, int (gid), or str (worksheet name)")
 
-def insert_contacts_for_month(
+def insert_month_contacts(
     worksheet: gspread.Worksheet,
     contacts: List[Dict[str, str]]
 ) -> List[int]:
+    """
+    Insert contacts into the worksheet grouped by date (MM/DD/YYYY).
 
+    Contacts are sorted chronologically and inserted day by day.
+    Existing entries are checked to avoid duplicates. The KPI block
+    is snapshotted and restored to prevent unintended changes.
+
+    Args:
+        worksheet: Target Google Sheets worksheet.
+        contacts: List of contact dicts containing a "date" key.
+
+    Returns:
+        List of inserted row indices.
+    """
     inserted_rows = []
-
+    inserted_contacts = already_inserted_for_date(worksheet)
     grouped = defaultdict(list)
 
     for contact in contacts:
@@ -54,49 +67,74 @@ def insert_contacts_for_month(
         grouped.keys(),
         key=lambda d: datetime.strptime(d, "%m/%d/%Y")
     )
-    
+    row_data, sheet_id = snapshot_kpi_block(worksheet)
+
     for date in sorted_dates:
-        rows = insert_contacts_after_row(
+        rows = insert_day_contatcs(
             worksheet,
             date,
-            grouped[date]
+            grouped[date],
+            inserted_contacts=inserted_contacts
         )
         inserted_rows.extend(rows)
 
+    restore_kpi_block(worksheet, row_data, sheet_id) # Ensures KPI cells are not altered 
     return inserted_rows
 
-def insert_contacts_after_row(
+def insert_day_contatcs(
     worksheet: gspread.Worksheet,
     date: str,
-    contacts: List[Dict[str, str]]
+    contacts: List[Dict[str, str]],
+    inserted_contacts: dict[str, set[str]] | None = None
 ) -> List[int]:
+    """
+    Insert contacts for a specific date into the worksheet.
 
-    inserted_rows = []
+    Phone numbers are normalized and checked against already inserted
+    contacts to prevent duplicates. New rows are batch-inserted at the
+    appropriate position for the given date.
 
-    start_row, _= find_insertion_row(worksheet, date)
-    current_row = start_row + 1
+    Args:
+        worksheet: Target Google Sheets worksheet.
+        date: Date string in "MM/DD/YYYY" format.
+        contacts: List of contact dicts containing "name" and "phone".
+        inserted_contacts: Optional mapping of dates to existing phone sets.
 
-    already = already_inserted_for_date(worksheet)
-    existing_phones = already.get(date, set())
-
+    Returns:
+        List of rows that were inserted (as raw row values).
+    """
+    if inserted_contacts is None:
+        inserted_contacts = already_inserted_for_date(worksheet)
+    
+    existing_phones = inserted_contacts.setdefault(date, set())
+    
+    # Filter out duplicates FIRST
+    rows_to_insert = []
     for entry in contacts:
         name = entry.get("name", "")
         phone = format_us_phone(entry.get("phone", ""))
-
+        
         if phone in existing_phones:
             continue
 
-        worksheet.insert_row(
-            [name, phone, None, date],
-            index=current_row,
-            inherit_from_before=True if current_row > 2 else None,
-            value_input_option="USER_ENTERED"
-        )
+        rows_to_insert.append([name, phone, None, date])
+        existing_phones.add(phone)
 
-        inserted_rows.append(current_row)
-        current_row += 1
+    if not rows_to_insert:
+        return []
 
-    return inserted_rows
+    # Determine insertion row
+    start_row, _ = find_insertion_row(worksheet, date)
+    start_row = 2 if start_row <= 1 else start_row
+
+    # Batch insert
+    worksheet.insert_rows(
+        rows_to_insert,
+        row=start_row,
+        value_input_option="USER_ENTERED"
+    )
+
+    return rows_to_insert
 
 def find_insertion_row(ws: gspread.Worksheet, target_date: str) -> tuple[int, bool]:
     """
@@ -153,3 +191,67 @@ def already_inserted_for_date(ws: gspread.Worksheet) -> dict[str, set[str]]:
         result[d].add(p.strip())
 
     return dict(result)
+
+def snapshot_kpi_block(worksheet):
+    """
+    Snapshot K1:P7 including formulas and formatting.
+    """
+
+    spreadsheet_id = worksheet.spreadsheet.id
+    sheet_id = worksheet._properties["sheetId"]
+
+    response = worksheet.spreadsheet.client.request(
+        "get",
+        f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}",
+        params={
+            "ranges": f"{worksheet.title}!K1:P7",
+            "includeGridData": True
+        }
+    )
+
+    data = response.json()
+
+    row_data = data["sheets"][0]["data"][0].get("rowData", [])
+
+    return row_data, sheet_id
+
+def restore_kpi_block(worksheet, snapshot_row_data, sheet_id):
+    """
+    Restores K1:P7 with formatting and clears K8:P downward.
+    """
+
+    requests = []
+
+    max_rows = worksheet.row_count
+    # Clear everything below row 7 in K:P
+    requests.append({
+        "updateCells": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 7,      # row 8
+                "endRowIndex": max_rows,
+                "startColumnIndex": 10,   # column K
+                "endColumnIndex": 16 
+            },
+            "fields": "userEnteredValue,userEnteredFormat"
+        }
+    })
+
+    # Restore KPI block
+    requests.append({
+        "updateCells": {
+            "range": {
+                "sheetId": sheet_id,
+                "startRowIndex": 0,
+                "endRowIndex": 8,
+                "startColumnIndex": 10,
+                "endColumnIndex": 16
+            },
+            "rows": snapshot_row_data,
+            "fields": "userEnteredValue,userEnteredFormat"
+        }
+    })
+
+    worksheet.spreadsheet.batch_update({
+        "requests": requests
+    })

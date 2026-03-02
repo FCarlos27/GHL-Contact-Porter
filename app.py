@@ -22,7 +22,8 @@ from services.sheets_api import (
     insert_day_contatcs,
     insert_month_contacts,
     select_worksheet,
-    get_location_sheet
+    get_location_sheet,
+    fetch_worksheets
 )
 from utils.formatting import (
     normalize_date,
@@ -135,7 +136,7 @@ def contacts_for_day():
             date=None,
             contacts=[]
         )
-
+    
     date_str = request.form.get("date")
     if not date_str:
         return "Missing date", 400
@@ -199,8 +200,6 @@ def contacts_for_month():
         "inserted_count": len(inserted),
         "month": month_str
     }, 200
-
-
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -34,6 +34,10 @@ def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gs
 
     raise TypeError("identifier must be None, int (gid), or str (worksheet name)")
 
+def fetch_worksheets(sheet:gspread.Spreadsheet):
+    worksheets = sheet.worksheets()
+    return worksheets
+
 def insert_month_contacts(
     worksheet: gspread.Worksheet,
     contacts: List[Dict[str, str]]

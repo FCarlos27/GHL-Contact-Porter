@@ -27,8 +27,10 @@ from services.sheets_api import (
 )
 from utils.formatting import (
     normalize_date,
-    compute_time_range
+    compute_time_range,
+    build_timezone_map
 )
+
 app = Flask(__name__)
 app.secret_key = "a-strong-secret-key"
 
@@ -52,7 +54,6 @@ def select_location():
         session["calendar_id"] = loc_data.get("calendar_id")
         session["location_name"] = loc_data.get("name")
         session["sheet_id"] = loc_data.get("sheet_id")
-
         return redirect("/menu")
 
     return render_template("select_location.html", locations=locations)
@@ -130,13 +131,58 @@ def oauth_callback():
 
 @app.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
 def contacts_for_day():
+    sheet = get_location_sheet(session["sheet_id"])
+    worksheets = fetch_worksheets(sheet)
+
+    tz_map = build_timezone_map()
+    regions = list(tz_map.keys())
+
+    selected_region = session.get("tz_region", "America")
+    selected_zone = session.get("tz_zone","New_York")
+
+    selected_title = session.get("selected_ws")
+
+     # --- Handle worksheet selection ---
+    if request.method == "POST" and request.form.get("worksheet"):
+        selected_title = request.form.get("worksheet")
+        session["selected_ws"] = selected_title
+        return redirect("/contacts/insert-in-sheet/day")
+    
+    # --- Handle timezone change ---
+    if request.method == "POST" and request.form.get("region"):
+        session["tz_region"] = request.form.get("region")
+        session["tz_zone"] = request.form.get("zone")
+        return redirect("/contacts/insert-in-sheet/day")
+
+    # Resolve current worksheet
+    try:
+        if selected_title:
+            ws = sheet.worksheet(selected_title)
+        else:
+            ws = worksheets[-1]  # default = last worksheet
+            session["selected_ws"] = ws.title
+    except Exception:
+        ws = worksheets[-1]
+        session["selected_ws"] = ws.title
+
+    tz = f"{selected_region}/{selected_zone}"
+    
+    # --- GET request ---
     if request.method == "GET":
         return render_template(
             "contacts_for_day.html",
             date=None,
-            contacts=[]
+            contacts=[],
+            worksheets=worksheets,
+            current_ws=ws,
+            regions=regions,
+            zones=tz_map[selected_region],
+            tz_map=tz_map,
+            selected_region=selected_region,
+            selected_zone=selected_zone
         )
-    
+
+    # --- Contact logic ---
     date_str = request.form.get("date")
     if not date_str:
         return "Missing date", 400
@@ -145,20 +191,25 @@ def contacts_for_day():
         session["location_id"],
         session["calendar_id"],
         session["access_token"],
-        *compute_time_range(date_str, "America/New_York")
+        *compute_time_range(date_str, tz=tz)
     ).json()
 
     contacts = extract_contacts_scheduled(json_data) or []
 
     if contacts:
-        sheet = get_location_sheet(session["sheet_id"])
-        ws = select_worksheet(sheet)
         insert_day_contatcs(ws, normalize_date(date_str), contacts)
 
     return render_template(
         "contacts_for_day.html",
         date=date_str,
-        contacts=contacts
+        contacts=contacts,
+        worksheets=worksheets,
+        current_ws=ws,
+        regions=regions,
+        zones=tz_map[selected_region],
+        tz_map=tz_map,
+        selected_region=selected_region,
+        selected_zone=selected_zone
     )
 
 @app.route("/contacts/insert-in-sheet/month")

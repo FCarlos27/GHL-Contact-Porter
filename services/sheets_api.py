@@ -5,14 +5,13 @@ from typing import Dict, List
 from utils.formatting import format_us_phone, normalize_date
 from google.oauth2.service_account import Credentials
 
-def get_location_sheet(sheet_id: str) -> gspread.Spreadsheet:
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds = Credentials.from_service_account_file(r"utils\credentials.json",
+scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+creds = Credentials.from_service_account_file(r"utils\credentials.json",
     scopes=scopes)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(sheet_id)
-    
-    return sheet
+gespread_client = gspread.authorize(creds)
+
+def get_location_sheet(sheet_id: str) -> gspread.Spreadsheet:
+    return gespread_client.open_by_key(sheet_id)
 
 def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gspread.worksheet:
     """Select a worksheet from the Google Sheet"""
@@ -35,6 +34,7 @@ def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gs
     raise TypeError("identifier must be None, int (gid), or str (worksheet name)")
 
 def fetch_worksheets(sheet:gspread.Spreadsheet):
+    """Returns a list of all worksheets <gspread.worksheet.Worksheet> in a spreadsheet."""
     worksheets = sheet.worksheets()
     return worksheets
 

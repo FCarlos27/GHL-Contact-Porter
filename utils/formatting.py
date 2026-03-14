@@ -1,7 +1,8 @@
 import re
 import calendar
 from datetime import datetime, time, date
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+from collections import defaultdict
 
 def format_us_phone(phone:int) -> int:
     """Formats the phone number into (xxx) xxx-xxxx"""
@@ -71,3 +72,18 @@ def compute_time_range(date_input: str, tz: str = "UTC", mode: str = "day"  # "d
     end = datetime.combine(end_date, time(23, 59, 59, 999000), tzinfo=zone)
 
     return int(start.timestamp() * 1000), int(end.timestamp() * 1000)
+
+def build_timezone_map():
+    tz_map = defaultdict(list)
+
+    for tz in available_timezones():
+        if "/" not in tz:
+            continue
+
+        region, city = tz.split("/", 1)
+        tz_map[region].append(city)
+
+    for region in tz_map:
+        tz_map[region].sort()
+
+    return dict(sorted(tz_map.items()))

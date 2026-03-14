@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from flask import Flask, request, render_template, redirect, session
 from datetime import datetime
 from services.ghl_api import (
@@ -30,10 +32,17 @@ from utils.formatting import (
     compute_time_range,
     build_timezone_map
 )
+from utils.helpers import(
+    safe_google_call
+)
+
+load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = "a-strong-secret-key"
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-fallback-only-use-locally")
 
+GLOBAL_TZ_MAP = build_timezone_map()
+REGIONS = list(GLOBAL_TZ_MAP.keys())
 
 @app.route("/", methods=["GET", "POST"])
 def select_location():
@@ -131,62 +140,64 @@ def oauth_callback():
 
 @app.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
 def contacts_for_day():
-    sheet = get_location_sheet(session["sheet_id"])
-    worksheets = fetch_worksheets(sheet)
-
-    tz_map = build_timezone_map()
-    regions = list(tz_map.keys())
-
-    selected_region = session.get("tz_region", "America")
-    selected_zone = session.get("tz_zone","New_York")
-
-    selected_title = session.get("selected_ws")
-
-     # --- Handle worksheet selection ---
+    # --- Handle Redirects First ---
+    # Worksheet selection
     if request.method == "POST" and request.form.get("worksheet"):
-        selected_title = request.form.get("worksheet")
-        session["selected_ws"] = selected_title
+        session["selected_ws"] = request.form.get("worksheet")
         return redirect("/contacts/insert-in-sheet/day")
     
-    # --- Handle timezone change ---
+    # Timezone change
     if request.method == "POST" and request.form.get("region"):
         session["tz_region"] = request.form.get("region")
         session["tz_zone"] = request.form.get("zone")
         return redirect("/contacts/insert-in-sheet/day")
 
-    # Resolve current worksheet
-    try:
-        if selected_title:
-            ws = sheet.worksheet(selected_title)
-        else:
-            ws = worksheets[-1]  # default = last worksheet
-            session["selected_ws"] = ws.title
-    except Exception:
-        ws = worksheets[-1]
-        session["selected_ws"] = ws.title
+    # --- Setup & Caching ---
+    sheet_id = session.get("sheet_id")
+    sheet = get_location_sheet(sheet_id)
 
+    # Cache worksheet titles in the session
+    if "ws_titles" not in session:
+        worksheets = fetch_worksheets(sheet)
+        session["ws_titles"] = [ws.title for ws in worksheets]
+        
+    ws_titles = session["ws_titles"]
+
+    # Determine selected worksheet (default to the last one if none selected)
+    selected_title = session.get("selected_ws")
+    if not selected_title or selected_title not in ws_titles:
+        selected_title = ws_titles[-1]
+        session["selected_ws"] = selected_title
+
+    # Lazy load ONLY the selected worksheet object
+    current_ws = sheet.worksheet(selected_title)
+
+    # Timezone resolution
+    selected_region = session.get("tz_region", "America")
+    selected_zone = session.get("tz_zone", "New_York")
     tz = f"{selected_region}/{selected_zone}"
-    
+
     # --- GET request ---
     if request.method == "GET":
         return render_template(
             "contacts_for_day.html",
             date=None,
             contacts=[],
-            worksheets=worksheets,
-            current_ws=ws,
-            regions=regions,
-            zones=tz_map[selected_region],
-            tz_map=tz_map,
+            worksheets=ws_titles,            
+            current_ws_title=selected_title, 
+            regions=REGIONS,
+            zones=GLOBAL_TZ_MAP.get(selected_region, []),
+            tz_map=GLOBAL_TZ_MAP,
             selected_region=selected_region,
             selected_zone=selected_zone
         )
 
-    # --- Contact logic ---
+    # --- POST request (Contact logic) ---
     date_str = request.form.get("date")
     if not date_str:
         return "Missing date", 400
 
+    # Fetch Calendar Events
     json_data = fetch_calendar_events(
         session["location_id"],
         session["calendar_id"],
@@ -196,36 +207,64 @@ def contacts_for_day():
 
     contacts = extract_contacts_scheduled(json_data) or []
 
+    # Write to Google Sheets Safely
     if contacts:
-        insert_day_contatcs(ws, normalize_date(date_str), contacts)
+        # Note: I kept your original spelling 'insert_day_contatcs'
+        success = safe_google_call(
+            insert_day_contatcs, 
+            current_ws, 
+            normalize_date(date_str), 
+            contacts
+        )
+        
+        # If the safe call returns None, it exhausted all retries
+        if success is None:
+            return "The Google Sheets API is currently busy. Please try again in a minute.", 503
 
+    # Re-render with results
     return render_template(
         "contacts_for_day.html",
         date=date_str,
         contacts=contacts,
-        worksheets=worksheets,
-        current_ws=ws,
-        regions=regions,
-        zones=tz_map[selected_region],
-        tz_map=tz_map,
+        worksheets=ws_titles,
+        current_ws_title=selected_title,
+        regions=REGIONS,
+        zones=GLOBAL_TZ_MAP.get(selected_region, []),
+        tz_map=GLOBAL_TZ_MAP,
         selected_region=selected_region,
         selected_zone=selected_zone
     )
 
-@app.route("/contacts/insert-in-sheet/month")
+@app.route("/contacts/insert-in-sheet/month", methods=["GET", "POST"])
 def contacts_for_month():
+    sheet_id = session.get("sheet_id")
+    sheet = get_location_sheet(sheet_id)
+    
+    if "ws_titles" not in session:
+        worksheets = fetch_worksheets(sheet)
+        session["ws_titles"] = [ws.title for ws in worksheets]
+    
+    ws_titles = session["ws_titles"]
+    selected_title = session.get("selected_ws") or ws_titles[-1]
+    
+    # Handle GET request 
+    if request.method == "GET":
+        return render_template(
+            "contacts_for_month.html", 
+            worksheets=ws_titles,
+            current_ws_title=selected_title,
+            month_str=datetime.now().strftime("%Y-%m")
+        )
 
-    tz = "America/New_York"
+    # Handle POST request 
+    month_str = request.form.get("month_select") # From the template
+    tz = "America/New_York" # Or pull from session 
 
-    # Get current month in YYYY-MM format
-    today = datetime.now()
-    month_str = today.strftime("%Y-%m")
-
-    # Compute start/end timestamps
     start_ms, end_ms = compute_time_range(month_str, tz, mode="month")
 
-    # Fetch events
-    response = fetch_calendar_events(
+    # Safe Google Call for fetching
+    response = safe_google_call(
+        fetch_calendar_events,
         session["location_id"],
         session["calendar_id"],
         session["access_token"],
@@ -234,23 +273,20 @@ def contacts_for_month():
     )
 
     json_data = response.json()
-
-    # Extract contacts
     contacts = extract_contacts_scheduled(json_data, month=True)
 
-    if not contacts:
-        return {"message": "No contacts found for this month."}, 200
+    if contacts:
+        ws = sheet.worksheet(selected_title)
+        safe_google_call(insert_month_contacts, ws, contacts)
 
-    # Insert into sheet
-    sheet = get_location_sheet(session["sheet_id"])
-    ws = select_worksheet(sheet)
-
-    inserted = insert_month_contacts(ws, contacts)
-
-    return {
-        "inserted_count": len(inserted),
-        "month": month_str
-    }, 200
+    return render_template(
+        "contacts_for_month.html",
+        inserted_count=len(contacts),
+        month_str=month_str,
+        worksheets=ws_titles,
+        current_ws_title=selected_title,
+        success=True
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

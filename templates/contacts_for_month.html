@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Monthly Appointment Contacts</title>
+    <style>
+        /* Reuse the same "Dark Mode" styling */
+        body {
+            background-color: #0a0a0a;
+            font-family: Arial, sans-serif;
+            color: white;
+            text-align: center;
+            padding-top: 40px;
+        }
+        .container {
+            background: #ffffff;
+            color: #000000;
+            padding: 25px;
+            border-radius: 8px;
+            width: 380px;
+            margin: auto;
+            box-shadow: 0 0 10px rgba(255,255,255,0.1);
+        }
+        select, input[type="month"] {
+            width: 100%;
+            padding: 8px;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            border: 1px solid #333;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            padding: 12px 20px;
+            border: none;
+            background-color: #222;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        input[type="submit"]:hover {
+            background-color: #444;
+        }
+        
+        /* Spinner Styling */
+        #loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 9999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            margin-top: 15px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .success-box {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #d4edda;
+            color: #155724;
+            border-radius: 5px; 
+            border: 1px solid #c3e6cb;
+        }
+        hr {
+            border: 0;
+            height: 1px;
+            background: #ddd;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="loading-text">Processing monthly data... <br> This may take a minute.</div>
+    </div>
+
+    <div class="container">
+        <h2>Monthly Insertion</h2>
+        <p style="font-size: 0.9em; color: #666;">This will scan the entire month for contacts.</p>
+        
+        <form method="POST" action="/contacts/insert-in-sheet/month" id="monthForm">
+            <label for="month_select">Select Month:</label>
+            <input type="month" id="month_select" name="month_select" 
+                   value="{{ month_str }}" required>
+            
+            <label for="worksheet">Target Worksheet:</label>
+            <select name="worksheet">
+                {% for title in worksheets %}
+                    <option value="{{ title }}" {% if title == current_ws_title %}selected{% endif %}>
+                        {{ title }}
+                    </option>
+                {% endfor %}
+            </select>
+
+            <input type="submit" value="Run Monthly Import">
+        </form>
+
+        {% if success %}
+            <div class="success-box">
+                <strong>Success!</strong><br>
+                    Imported {{ inserted_count }} contacts for 
+                <strong>{{ month_name }} {{ year }}</strong>.
+            </div>
+        {% endif %}
+
+        <div style="margin-top: 20px;">
+            <a href="/contacts/insert-in-sheet/day" style="color: #444; font-size: 0.8em;">Switch to Daily View</a>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('monthForm');
+        
+        form.onsubmit = function(e) {
+            // Confirmation dialog for the "Month" operation
+            const monthVal = document.getElementById('month_select').value;
+            const confirmAction = confirm(`Are you sure you want to import ALL contacts for ${monthVal}? This will check every day of the month.`);
+            
+            if (confirmAction) {
+                document.getElementById('loading-overlay').style.display = 'flex';
+                return true;
+            } else {
+                return false; // Cancel submission
+            }
+        };
+    </script>
+
+</body>
+</html>

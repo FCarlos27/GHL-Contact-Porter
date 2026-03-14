@@ -20,13 +20,14 @@
             margin: auto;
             box-shadow: 0 0 10px rgba(255,255,255,0.1);
         }
-        input[type="date"] {
+        select, input[type="date"] {
             width: 100%;
             padding: 8px;
             margin-top: 10px;
             margin-bottom: 20px;
             border-radius: 5px;
             border: 1px solid #333;
+            box-sizing: border-box; /* Keeps inputs inside the container */
         }
         input[type="submit"] {
             padding: 10px 20px;
@@ -35,6 +36,7 @@
             color: white;
             border-radius: 5px;
             cursor: pointer;
+            width: 100%;
         }
         input[type="submit"]:hover {
             background-color: #444;
@@ -52,56 +54,106 @@
         .contact-box strong {
             color: #000;
         }
+        hr {
+            border: 0;
+            height: 1px;
+            background: #ddd;
+            margin: 20px 0;
+        }
+        
+        #loading-overlay {
+            display: none; 
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 15px;
+            color: white;
+            font-weight: bold;
+        }
     </style>
 </head>
 
 <body>
 
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Communicating with Google APIs...</div>
+</div>
+
 <div class="container">
-    <h2>Get Contacts for insertion</h2>
+    <h2>Get Contacts for Insertion</h2>
+    
     <form method="POST" action="/contacts/insert-in-sheet/day">
         <label for="worksheet">Select Worksheet:</label>
         <select name="worksheet" onchange="this.form.submit()">
-            {% for w in worksheets %}
-                <option value="{{ w.title }}"
-                    {% if w.title == current_ws.title %}selected{% endif %}>
-                    {{ w.title }}
+            {% for title in worksheets %}
+                <option value="{{ title }}" {% if title == current_ws_title %}selected{% endif %}>
+                    {{ title }}
                 </option>
             {% endfor %}
         </select>
     </form>
 
-    <label for="region">Timezone Region:</label>
-    <select name="region" id="region" onchange="updateZones()">
-        {% for r in regions %}
-        <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>
-        {{ r }}
-        </option>
-        {% endfor %}
-    </select>
-    <br>
+    <hr>
 
-    <label for="zone">Timezone:</label>
-        <select name="zone" id="zone">
+    <form method="POST" action="/contacts/insert-in-sheet/day">
+        <label for="region">Timezone Region:</label>
+        <select name="region" id="region" onchange="updateZones()">
+            {% for r in regions %}
+            <option value="{{ r }}" {% if r == selected_region %}selected{% endif %}>
+            {{ r }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label for="zone">Timezone Zone:</label>
+        <select name="zone" id="zone" onchange="this.form.submit()">
             {% for z in zones %}
             <option value="{{ z }}" {% if z == selected_zone %}selected{% endif %}>
             {{ z }}
             </option>
             {% endfor %}
         </select>
+    </form>
 
+    <hr>
 
     <form method="POST" action="/contacts/insert-in-sheet/day">
         <label for="date">Select a date:</label>
         <input type="date" id="date" name="date" value="{{ date or '' }}" required>
-        <input type="submit" value="Fetch Contacts">
+        <input type="submit" value="Fetch & Insert Contacts">
     </form>
 
     {% if contacts %}
     <div class="results">
         {% set y, m, d = date.split('-') %}
         <h3>Contacts for {{ m }}-{{ d }}-{{ y }}</h3>
-        <h5>(duplicated contacts in this date are not inserted)</h5>
+        <h5 style="color: #666; margin-top: -10px;">(Duplicated contacts are skipped)</h5>
 
         {% for c in contacts %}
         <div class="contact-box">
@@ -110,29 +162,48 @@
         </div>
         {% endfor %}
     </div>
-
     {% elif date %}
-        <p>No contacts found for this date.</p>
+        <p style="margin-top: 20px;">No contacts found for this date.</p>
     {% endif %}
-    </div>
+</div>
 
-    <script>
-        const tzMap = JSON.parse('{{ tz_map | tojson | safe }}');
+<script>
+    const tzMap = JSON.parse('{{ tz_map | tojson | safe }}');
 
-        function updateZones() {
-            const region = document.getElementById("region").value;
-            const zoneSelect = document.getElementById("zone");
+    function updateZones() {
+        const region = document.getElementById("region").value;
+        const zoneSelect = document.getElementById("zone");
 
-            zoneSelect.innerHTML = "";
+        zoneSelect.innerHTML = "";
 
-            tzMap[region].forEach(zone => {
-                const opt = document.createElement("option");
-                opt.value = zone;
-                opt.textContent = zone;
-                zoneSelect.appendChild(opt);
-            });
-        }
-    </script>
+        // Add a placeholder so the user knows they need to click it
+        const defaultOpt = document.createElement("option");
+        defaultOpt.text = "-- Select a Zone --";
+        defaultOpt.disabled = true;
+        defaultOpt.selected = true;
+        zoneSelect.appendChild(defaultOpt);
+
+        // Populate new zones
+        tzMap[region].forEach(zone => {
+            const opt = document.createElement("option");
+            opt.value = zone;
+            opt.textContent = zone;
+            zoneSelect.appendChild(opt);
+        });
+    }
+
+    // Function to show the loading screen
+    function showLoading() {
+        document.getElementById('loading-overlay').style.display = 'flex';
+    }
+
+    // Attach the loader to all forms 
+    document.querySelectorAll('form').forEach(form => {
+        form.onsubmit = function() {
+            showLoading();
+        };
+    });
+</script>
+
 </body>
 </html>
-

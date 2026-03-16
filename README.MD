@@ -30,7 +30,7 @@ By leveraging specific company appointment formatting, the program only needs to
 
 1. **Clone the Repo:**
    ```bash
-   git clone [your-repo-link]
+   git clone [https://github.com/FCarlos27/GHL-Contact-Porter]
    cd ghl-sheets-porter
 
 2. **Install Dependencies:**

@@ -2,7 +2,7 @@ import gspread
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
-from utils.formatting import format_us_phone, normalize_date
+from utils.formatting import format_us_phone
 from google.oauth2.service_account import Credentials
 
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]

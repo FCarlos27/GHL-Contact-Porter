@@ -1,10 +1,7 @@
 import requests
 from utils.config import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, TOKEN_URL
 
-from services.gist_storage import (
-    get_tokens,
-    save_tokens,
-)
+from services.supabase import save_tokens
 
 def exchange_code_for_tokens(code):
     """ 

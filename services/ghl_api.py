@@ -1,4 +1,4 @@
-from services.gist_storage import get_tokens, get_location_data, save_location_name
+from services.supabase import get_tokens, get_location_data, save_location_name
 import requests
 
 def fetch_location_name(location_id):

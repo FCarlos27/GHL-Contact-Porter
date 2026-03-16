@@ -1,17 +1,19 @@
 import os
 from dotenv import load_dotenv
-from flask import Flask, request, render_template, redirect, session
+from flask import Flask, request, render_template, redirect, session, flash
 from datetime import datetime
 from services.ghl_api import (
     ensure_location_name,
     fetch_calendar_events,
 )
-from services.gist_storage import (
-    save_tokens,
+
+from services.supabase import (
+    save_tokens, 
     get_all_locations_name_id,
     get_location_data,
     token_is_stale
-    )
+)
+
 from services.oauth import (
     exchange_code_for_tokens,
     refresh_if_needed
@@ -277,15 +279,26 @@ def contacts_for_month():
 
     if contacts:
         ws = sheet.worksheet(selected_title)
-        safe_google_call(insert_month_contacts, ws, contacts)
+        rows_inserted = safe_google_call(insert_month_contacts, ws, contacts)
+
+    if len(rows_inserted) >=1:
+        flash(f"Successfully added {len(rows_inserted)} rows to the sheet!", "success")
+        success_state = True
+    else: 
+        if len(contacts) == 0:
+            flash("No contatcs found to insert", "info")
+            success_state = False
+        else:
+            flash("Sheet is already synced", "info")
+            success_state = False
+
 
     return render_template(
         "contacts_for_month.html",
-        inserted_count=len(contacts),
         month_str=month_str,
         worksheets=ws_titles,
         current_ws_title=selected_title,
-        success=True
+        success=success_state
     )
 
 if __name__ == '__main__':

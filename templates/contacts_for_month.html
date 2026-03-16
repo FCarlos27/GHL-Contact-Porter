@@ -120,13 +120,18 @@
             <input type="submit" value="Run Monthly Import">
         </form>
 
-        {% if success %}
-            <div class="success-box">
-                <strong>Success!</strong><br>
-                    Imported {{ inserted_count }} contacts for 
-                <strong>{{ month_name }} {{ year }}</strong>.
-            </div>
-        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} success-box">
+                    <strong>
+                    {% if category == 'success' %} Success! {% else %} Notice: {% endif %}
+                    </strong><br>
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
 
         <div style="margin-top: 20px;">
             <a href="/contacts/insert-in-sheet/day" style="color: #444; font-size: 0.8em;">Switch to Daily View</a>
@@ -148,6 +153,16 @@
                 return false; // Cancel submission
             }
         };
+
+        // Find all alert boxes and make them fade out after 5 seconds
+        setTimeout(function() {
+            const alerts = document.querySelectorAll('.success-box');
+            alerts.forEach(alert => {
+                alert.style.transition = "opacity 0.6s ease";
+                alert.style.opacity = "0";
+                setTimeout(() => alert.remove(), 600); // Remove from DOM after fade
+            });
+        }, 5000);
     </script>
 
 </body>

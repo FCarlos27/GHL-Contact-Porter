@@ -5,7 +5,7 @@ def fetch_location_name(location_id):
     access, _ = get_tokens(location_id)
 
     url = f"https://services.leadconnectorhq.com/locations/{location_id}"
-    
+
     payload = {}
     headers = {
         'Accept': 'application/json',
@@ -31,7 +31,7 @@ def ensure_location_name(location_id):
 
 def fetch_calendar_events(location_id, calendar_id, access_token, start_time, end_time):
     """Fetch raw calendar events from GHL."""
-    
+
     url = "https://services.leadconnectorhq.com/calendars/events"
 
     params = {
@@ -48,34 +48,4 @@ def fetch_calendar_events(location_id, calendar_id, access_token, start_time, en
     }
 
     return requests.get(url, headers=headers, params=params)
-
-def fetch_contacts_by_appointment_data(location_id, start, end, access_token):
-    """Fetch contacts whose last appointment falls within a date range."""
-
-    url = "https://services.leadconnectorhq.com/contacts/search"
-
-    payload = {
-        "locationId": location_id,
-        "page": 1,
-        "pageLimit": 40,
-        "filters": [
-            {
-                "field": "lastAppointment",
-                "operator": "range",
-                "value": {
-                    "gt": start,
-                    "lt": end
-                }
-            }
-        ]
-    }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {access_token}"
-    }
-
-    return requests.post(url, headers=headers, json=payload)
-
-
 

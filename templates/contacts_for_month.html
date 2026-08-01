@@ -43,7 +43,7 @@
         input[type="submit"]:hover {
             background-color: #444;
         }
-        
+
         /* Spinner Styling */
         #loading-overlay {
             display: none;
@@ -81,7 +81,7 @@
             padding: 15px;
             background-color: #d4edda;
             color: #155724;
-            border-radius: 5px; 
+            border-radius: 5px;
             border: 1px solid #c3e6cb;
         }
         hr {
@@ -102,12 +102,12 @@
     <div class="container">
         <h2>Monthly Insertion</h2>
         <p style="font-size: 0.9em; color: #666;">This will scan the entire month for contacts.</p>
-        
+
         <form method="POST" action="/contacts/insert-in-sheet/month" id="monthForm">
             <label for="month_select">Select Month:</label>
-            <input type="month" id="month_select" name="month_select" 
+            <input type="month" id="month_select" name="month_select"
                    value="{{ month_str }}" required>
-            
+
             <label for="worksheet">Target Worksheet:</label>
             <select name="worksheet">
                 {% for title in worksheets %}
@@ -140,12 +140,12 @@
 
     <script>
         const form = document.getElementById('monthForm');
-        
+
         form.onsubmit = function(e) {
             // Confirmation dialog for the "Month" operation
             const monthVal = document.getElementById('month_select').value;
             const confirmAction = confirm(`Are you sure you want to import ALL contacts for ${monthVal}? This will check every day of the month.`);
-            
+
             if (confirmAction) {
                 document.getElementById('loading-overlay').style.display = 'flex';
                 return true;

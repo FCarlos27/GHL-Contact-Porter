@@ -1,6 +1,13 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from supabase import create_client
 from datetime import datetime, timezone, timedelta
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
+
+for proxy_var in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]:
+    os.environ.pop(proxy_var, None)
 
 # -----------------------------
 # Supabase Configuration
@@ -11,7 +18,13 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Supabase credentials not found in environment variables.")
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except ImportError as exc:
+    raise RuntimeError(
+        "Supabase client initialization failed. Install the missing proxy dependency with 'pip install httpx[socks]' or disable proxy settings."
+    ) from exc
+
 TABLE_NAME = "locations"
 
 # -----------------------------
@@ -22,7 +35,7 @@ def get_all_locations_name_id():
     """Return a list of {'id': ..., 'name': ...} for all stored locations."""
     # Only pull the exact columns we need
     response = supabase.table(TABLE_NAME).select("location_id, name").execute()
-    
+
     locations = []
     for row in response.data:
         locations.append({
@@ -41,11 +54,6 @@ def get_tokens(location_id):
     loc = get_location_data(location_id)
     return loc.get("access_token"), loc.get("refresh_token")
 
-def get_calendar_id(location_id):
-    """Return the calendar ID for a location."""
-    loc = get_location_data(location_id)
-    return loc.get("calendar_id")
-
 def save_tokens(location_id, access_token, refresh_token):
     """Save or update tokens for a specific location."""
     data = {
@@ -56,36 +64,11 @@ def save_tokens(location_id, access_token, refresh_token):
     }
     supabase.table(TABLE_NAME).upsert(data).execute()
 
-def save_calendar_id(location_id, calendar_id):
-    """Save or update the calendar ID for a specific location."""
-    data = {
-        "location_id": location_id,
-        "calendar_id": calendar_id
-    }
-    supabase.table(TABLE_NAME).upsert(data).execute()
-
 def save_location_name(location_id, name):
     """Save the location's name for a specific location."""
     data = {
         "location_id": location_id,
         "name": name
-    }
-    supabase.table(TABLE_NAME).upsert(data).execute()
-
-def save_location_sheet(location_id, sheet_id):
-    """Save the location's appointments sheet id for a specific location."""
-    data = {
-        "location_id": location_id,
-        "sheet_id": sheet_id
-    }
-    supabase.table(TABLE_NAME).upsert(data).execute()
-
-def update_access_token(location_id, new_access_token):
-    """Update only the access token after a refresh."""
-    data = {
-        "location_id": location_id,
-        "access_token": new_access_token,
-        "last_refresh": datetime.now(timezone.utc).isoformat()
     }
     supabase.table(TABLE_NAME).upsert(data).execute()
 
@@ -98,7 +81,7 @@ def token_is_stale(last_refresh):
         return True
 
     try:
-        # If last_refresh is already a datetime object 
+        # If last_refresh is already a datetime object
         if isinstance(last_refresh, datetime):
             last = last_refresh
         else:
@@ -108,5 +91,5 @@ def token_is_stale(last_refresh):
         return True
 
     now = datetime.now(timezone.utc)
-    
+
     return now - last > timedelta(hours=24)

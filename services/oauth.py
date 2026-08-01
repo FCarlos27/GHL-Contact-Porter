@@ -3,8 +3,18 @@ from utils.config import CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, TOKEN_URL
 
 from services.supabase import save_tokens
 
+
+def _validate_oauth_settings():
+    if not all([CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, TOKEN_URL]):
+        raise RuntimeError(
+            "OAuth configuration is incomplete. Set CLIENT_ID, CLIENT_SECRET, REDIRECT_URI, and TOKEN_URL in your .env file."
+        )
+
+
+_validate_oauth_settings()
+
 def exchange_code_for_tokens(code):
-    """ 
+    """
     Exchange the authorization code for access + refresh tokens.
     Used only during the OAuth callback.
     """
@@ -64,7 +74,6 @@ def refresh_if_needed(location_id, refresh_token):
     """
     if not refresh_token:
         raise Exception(f"No refresh token found for location {location_id}")
-
     new_access, new_refresh = refresh_access_token(refresh_token)
 
     # Save both tokens back to Gist

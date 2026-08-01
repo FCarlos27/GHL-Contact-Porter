@@ -21,7 +21,7 @@ def normalize_date(iso: str) -> str:
     """Returns date string with format MM/DD/YYYY"""
     # Replace any slashes with dashes, then split by the dash
     parts = iso.replace("/", "-").split("-")
-    
+
     # Ensure parts have the correct length
     if len(parts) != 3:
         raise ValueError("Invalid date format")
@@ -35,7 +35,7 @@ def compute_time_range(date_input: str, tz: str = "UTC", mode: str = "day"  # "d
 ) -> tuple[int, int]:
     """
     Returns (start_ms, end_ms) for a given day or month.
-    
+
     date_input:
         - day mode:   "YYYY-MM-DD"
         - month mode: "YYYY-MM"

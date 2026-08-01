@@ -1,3 +1,4 @@
+import os
 import gspread
 from collections import defaultdict
 from datetime import datetime
@@ -6,34 +7,16 @@ from utils.formatting import format_us_phone
 from google.oauth2.service_account import Credentials
 
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-creds = Credentials.from_service_account_file(r"utils\credentials.json",
-    scopes=scopes)
-gespread_client = gspread.authorize(creds)
+creds = Credentials.from_service_account_file(
+    os.path.join("utils", "credentials.json"),
+    scopes=scopes
+)
+gspread_client = gspread.authorize(creds)
 
 def get_location_sheet(sheet_id: str) -> gspread.Spreadsheet:
-    return gespread_client.open_by_key(sheet_id)
+    return gspread_client.open_by_key(sheet_id)
 
-def select_worksheet(sheet:gspread.Spreadsheet, identifier: int|str =None) -> gspread.worksheet:
-    """Select a worksheet from the Google Sheet"""
-
-    # No identifier → return last worksheet
-    if identifier is None:
-        return sheet.worksheets()[-1]
-
-    # Identifier is numeric → treat as gid
-    if isinstance(identifier, int):
-        for ws in sheet.worksheets():
-            if ws.id == identifier:
-                return ws
-        raise ValueError(f"No worksheet found with gid={identifier}")
-
-    # Identifier is string → treat as worksheet name
-    if isinstance(identifier, str):
-        return sheet.worksheet(identifier)
-
-    raise TypeError("identifier must be None, int (gid), or str (worksheet name)")
-
-def fetch_worksheets(sheet:gspread.Spreadsheet):
+def fetch_worksheets(sheet: gspread.Spreadsheet):
     """Returns a list of all worksheets <gspread.worksheet.Worksheet> in a spreadsheet."""
     worksheets = sheet.worksheets()
     return worksheets
@@ -74,7 +57,7 @@ def insert_month_contacts(
     row_data, sheet_id = snapshot_kpi_block(worksheet)
 
     for date in sorted_dates:
-        rows = insert_day_contatcs(
+        rows = insert_day_contacts(
             worksheet,
             date,
             grouped[date],
@@ -82,10 +65,10 @@ def insert_month_contacts(
         )
         inserted_rows.extend(rows)
 
-    restore_kpi_block(worksheet, row_data, sheet_id) # Ensures KPI cells are not altered 
+    restore_kpi_block(worksheet, row_data, sheet_id) # Ensures KPI cells are not altered
     return inserted_rows
 
-def insert_day_contatcs(
+def insert_day_contacts(
     worksheet: gspread.Worksheet,
     date: str,
     contacts: List[Dict[str, str]],
@@ -109,15 +92,15 @@ def insert_day_contatcs(
     """
     if inserted_contacts is None:
         inserted_contacts = already_inserted_for_date(worksheet)
-    
+
     existing_phones = inserted_contacts.setdefault(date, set())
-    
+
     # Filter out duplicates FIRST
     rows_to_insert = []
     for entry in contacts:
         name = entry.get("name", "")
         phone = format_us_phone(entry.get("phone", ""))
-        
+
         if phone in existing_phones:
             continue
 
@@ -155,7 +138,7 @@ def find_insertion_row(ws: gspread.Worksheet, target_date: str) -> tuple[int, bo
     next_larger = None
 
     target_date = datetime.strptime(target_date, "%m/%d/%Y").date()
-    
+
     for i, value in enumerate(dates):
         try:
             current_dt = datetime.strptime(value, "%m/%d/%Y").date()
@@ -235,7 +218,7 @@ def restore_kpi_block(worksheet, snapshot_row_data, sheet_id):
                 "startRowIndex": 7,      # row 8
                 "endRowIndex": max_rows,
                 "startColumnIndex": 10,   # column K
-                "endColumnIndex": 16 
+                "endColumnIndex": 16
             },
             "fields": "userEnteredValue,userEnteredFormat"
         }

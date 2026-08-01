@@ -51,8 +51,6 @@
     <h1>Welcome to {{ location_name }} Calendar</h1>
 
     <form method="POST" action="/menu" id="menuForm">
-        <input type="hidden" name="location_id" value="{{ selected_location }}">
-
         <select name="option" id="option" onchange="toggleDateInput()">
             <option value="" disabled selected>Select an option</option>
             <option value="1">View appointments for a specific date</option>

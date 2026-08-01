@@ -60,9 +60,9 @@
             background: #ddd;
             margin: 20px 0;
         }
-        
+
         #loading-overlay {
-            display: none; 
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
@@ -75,7 +75,7 @@
             align-items: center;
         }
 
-        
+
         .spinner {
             width: 50px;
             height: 50px;
@@ -107,7 +107,7 @@
 
 <div class="container">
     <h2>Get Contacts for Insertion</h2>
-    
+
     <form method="POST" action="/contacts/insert-in-sheet/day">
         <label for="worksheet">Select Worksheet:</label>
         <select name="worksheet" onchange="this.form.submit()">
@@ -197,7 +197,7 @@
         document.getElementById('loading-overlay').style.display = 'flex';
     }
 
-    // Attach the loader to all forms 
+    // Attach the loader to all forms
     document.querySelectorAll('form').forEach(form => {
         form.onsubmit = function() {
             showLoading();

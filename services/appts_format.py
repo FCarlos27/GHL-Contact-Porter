@@ -3,7 +3,7 @@ from utils.formatting import normalize_date
 
 def create_appointments_html(json_data):
     """Return a clean list of appointment objects ready for rendering."""
-    
+
     descriptions = []
 
     for event in json_data.get("events", []):
@@ -69,7 +69,7 @@ def extract_contacts_scheduled(json_data, month=False):
 
         notes = event.get("notes", "")
         endTime = event.get("endTime", "")
-        extracted = extract_contact_from_notes(notes, endTime) if month else extract_contact_from_notes(notes) 
+        extracted = extract_contact_from_notes(notes, endTime) if month else extract_contact_from_notes(notes)
 
         # Only append if at least name or phone exists
         if extracted["name"] or extracted["phone"]:
@@ -79,7 +79,7 @@ def extract_contacts_scheduled(json_data, month=False):
 
 def extract_contact_from_notes(notes: str, date: str | None = None) -> dict:
     """Return the client's name and phone from an appointment's description, appends date if passed else None"""
-    
+
     if not notes:
         return {"name": None, "phone": None, "date": None}
 
@@ -107,13 +107,3 @@ def extract_contact_from_notes(notes: str, date: str | None = None) -> dict:
         "phone": phone,
         "date": normalized_date
     }
-
-
-
-
-
-
-
-
-
-

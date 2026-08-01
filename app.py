@@ -2,13 +2,17 @@ import os
 from dotenv import load_dotenv
 from flask import Flask, request, render_template, redirect, session, flash
 from datetime import datetime
+from functools import wraps
+
+load_dotenv()
+
 from services.ghl_api import (
     ensure_location_name,
     fetch_calendar_events,
 )
 
 from services.supabase import (
-    save_tokens, 
+    save_tokens,
     get_all_locations_name_id,
     get_location_data,
     token_is_stale
@@ -23,9 +27,8 @@ from services.appts_format import (
     extract_contacts_scheduled
 )
 from services.sheets_api import (
-    insert_day_contatcs,
+    insert_day_contacts,
     insert_month_contacts,
-    select_worksheet,
     get_location_sheet,
     fetch_worksheets
 )
@@ -34,17 +37,24 @@ from utils.formatting import (
     compute_time_range,
     build_timezone_map
 )
-from utils.helpers import(
+from utils.helpers import (
     safe_google_call
 )
-
-load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-fallback-only-use-locally")
 
 GLOBAL_TZ_MAP = build_timezone_map()
 REGIONS = list(GLOBAL_TZ_MAP.keys())
+
+def session_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if "location_id" not in session:
+            flash("Please select a location first.", "info")
+            return redirect("/")
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route("/", methods=["GET", "POST"])
 def select_location():
@@ -70,22 +80,19 @@ def select_location():
     return render_template("select_location.html", locations=locations)
 
 @app.route("/menu", methods=["GET", "POST"])
+@session_required
 def menu():
-    if "location_id" not in session:
-        return redirect("/")
-
     selected_location = session["location_id"]
-    access_token= session["access_token"]
+    access_token = session["access_token"]
     calendar_id = session["calendar_id"]
 
     title = ""
     html = ""
-    
 
     if request.method == "POST":
         option = request.form.get("option")
         date_input = request.form.get("date", "")
-    
+
         # Determine date range
         if option == "1" and date_input:
             title = f"Appointments for {date_input}"
@@ -95,8 +102,8 @@ def menu():
             return redirect("/contacts/insert-in-sheet/day")
 
         elif option == "3":
-            return redirect ("/contacts/insert-in-sheet/month")
-        
+            return redirect("/contacts/insert-in-sheet/month")
+
         elif option == "4":
             return "Exiting the program."
 
@@ -114,7 +121,6 @@ def menu():
 
         for i, desc in enumerate(appointments, start=1):
             html += f"{i}. {desc}<br><br>"
-        
 
     return render_template(
         "menu.html",
@@ -128,26 +134,27 @@ def menu():
 @app.route("/oauth/callback")
 def oauth_callback():
     code = request.args.get("code")
- 
+
     # Get locationId + tokens from GH
     location_id, access, refresh = exchange_code_for_tokens(code)
-    
+
     # Save tokens
     save_tokens(location_id, access, refresh)
-   
+
     # Save location name (fetches from GHL if missing)
     ensure_location_name(location_id)
 
     return f"App installed successfully for location: {location_id}"
 
 @app.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
+@session_required
 def contacts_for_day():
     # --- Handle Redirects First ---
     # Worksheet selection
     if request.method == "POST" and request.form.get("worksheet"):
         session["selected_ws"] = request.form.get("worksheet")
         return redirect("/contacts/insert-in-sheet/day")
-    
+
     # Timezone change
     if request.method == "POST" and request.form.get("region"):
         session["tz_region"] = request.form.get("region")
@@ -162,7 +169,7 @@ def contacts_for_day():
     if "ws_titles" not in session:
         worksheets = fetch_worksheets(sheet)
         session["ws_titles"] = [ws.title for ws in worksheets]
-        
+
     ws_titles = session["ws_titles"]
 
     # Determine selected worksheet (default to the last one if none selected)
@@ -185,8 +192,8 @@ def contacts_for_day():
             "contacts_for_day.html",
             date=None,
             contacts=[],
-            worksheets=ws_titles,            
-            current_ws_title=selected_title, 
+            worksheets=ws_titles,
+            current_ws_title=selected_title,
             regions=REGIONS,
             zones=GLOBAL_TZ_MAP.get(selected_region, []),
             tz_map=GLOBAL_TZ_MAP,
@@ -211,14 +218,13 @@ def contacts_for_day():
 
     # Write to Google Sheets Safely
     if contacts:
-        # Note: I kept your original spelling 'insert_day_contatcs'
         success = safe_google_call(
-            insert_day_contatcs, 
-            current_ws, 
-            normalize_date(date_str), 
+            insert_day_contacts,
+            current_ws,
+            normalize_date(date_str),
             contacts
         )
-        
+
         # If the safe call returns None, it exhausted all retries
         if success is None:
             return "The Google Sheets API is currently busy. Please try again in a minute.", 503
@@ -238,29 +244,30 @@ def contacts_for_day():
     )
 
 @app.route("/contacts/insert-in-sheet/month", methods=["GET", "POST"])
+@session_required
 def contacts_for_month():
     sheet_id = session.get("sheet_id")
     sheet = get_location_sheet(sheet_id)
-    
+
     if "ws_titles" not in session:
         worksheets = fetch_worksheets(sheet)
         session["ws_titles"] = [ws.title for ws in worksheets]
-    
+
     ws_titles = session["ws_titles"]
     selected_title = session.get("selected_ws") or ws_titles[-1]
-    
-    # Handle GET request 
+
+    # Handle GET request
     if request.method == "GET":
         return render_template(
-            "contacts_for_month.html", 
+            "contacts_for_month.html",
             worksheets=ws_titles,
             current_ws_title=selected_title,
             month_str=datetime.now().strftime("%Y-%m")
         )
 
-    # Handle POST request 
-    month_str = request.form.get("month_select") # From the template
-    tz = "America/New_York" # Or pull from session 
+    # Handle POST request
+    month_str = request.form.get("month_select")  # From the template
+    tz = "America/New_York"  # Or pull from session
 
     start_ms, end_ms = compute_time_range(month_str, tz, mode="month")
 
@@ -274,31 +281,42 @@ def contacts_for_month():
         end_ms
     )
 
+    if response is None:
+        flash("The Google Calendar API is currently busy. Please try again in a minute.", "info")
+        return render_template(
+            "contacts_for_month.html",
+            month_str=month_str,
+            worksheets=ws_titles,
+            current_ws_title=selected_title,
+        )
+
     json_data = response.json()
     contacts = extract_contacts_scheduled(json_data, month=True)
 
-    if contacts:
-        ws = sheet.worksheet(selected_title)
-        rows_inserted = safe_google_call(insert_month_contacts, ws, contacts)
+    if not contacts:
+        flash("No contacts found to insert", "info")
+        return render_template(
+            "contacts_for_month.html",
+            month_str=month_str,
+            worksheets=ws_titles,
+            current_ws_title=selected_title,
+        )
 
-    if len(rows_inserted) >=1:
+    ws = sheet.worksheet(selected_title)
+    rows_inserted = safe_google_call(insert_month_contacts, ws, contacts)
+
+    if rows_inserted is None:
+        flash("The Google Sheets API is currently busy. Please try again in a minute.", "info")
+    elif len(rows_inserted) >= 1:
         flash(f"Successfully added {len(rows_inserted)} rows to the sheet!", "success")
-        success_state = True
-    else: 
-        if len(contacts) == 0:
-            flash("No contatcs found to insert", "info")
-            success_state = False
-        else:
-            flash("Sheet is already synced", "info")
-            success_state = False
-
+    else:
+        flash("Sheet is already synced", "info")
 
     return render_template(
         "contacts_for_month.html",
         month_str=month_str,
         worksheets=ws_titles,
         current_ws_title=selected_title,
-        success=success_state
     )
 
 if __name__ == '__main__':

@@ -13,32 +13,54 @@ def _validate_oauth_settings():
 
 _validate_oauth_settings()
 
-def exchange_code_for_tokens(code):
+def exchange_code_for_credentials(code):
     """
-    Exchange the authorization code for access + refresh tokens.
+    Exchange the authorization code for credentials (tokens, locationId, companyId).
+    Returns the full JSON response from GHL.
     Used only during the OAuth callback.
     """
 
     payload = {
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
-        "grant_type": "authorization_code",
+        "clientId": CLIENT_ID,
+        "clientSecret": CLIENT_SECRET,
+        "grantType": "authorization_code",
         "code": code,
-        "redirect_uri": REDIRECT_URI,
-        "user_type": "Location"
+        "redirectUri": REDIRECT_URI,
+        "userType": "Location"
     }
 
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
-        "Accept": "application/json"
+        "Accept": "application/json",
+        "Version": "v3"
     }
 
     response = requests.post(TOKEN_URL, data=payload, headers=headers)
-    response.raise_for_status()
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Token exchange failed with {response.status_code}: {response.text}"
+        )
 
-    data = response.json()
+    return response.json()
 
-    return data.get("locationId"), data.get("access_token"), data.get("refresh_token")
+
+def get_company_locations(access_token):
+    """Fetch all locations accessible to a Company-level (agency) install."""
+    url = "https://services.leadconnectorhq.com/locations/search"
+
+    headers = {
+        "Accept": "application/json",
+        "Version": "v3",
+        "Authorization": f"Bearer {access_token}"
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Failed to fetch locations with {response.status_code}: {response.text}"
+        )
+
+    return response.json().get("locations", [])
 
 
 def refresh_access_token(refresh_token):
@@ -69,14 +91,14 @@ def refresh_access_token(refresh_token):
 
 def refresh_if_needed(location_id, refresh_token):
     """
-    Refresh the token for a location and update the Gist.
+    Refresh the token for a location and update the database.
     Returns the new access token.
     """
     if not refresh_token:
         raise Exception(f"No refresh token found for location {location_id}")
     new_access, new_refresh = refresh_access_token(refresh_token)
 
-    # Save both tokens back to Gist
+    # Save both tokens back to the database
     save_tokens(location_id, new_access, new_refresh)
 
     return new_access

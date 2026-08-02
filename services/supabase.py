@@ -54,7 +54,7 @@ def get_tokens(location_id):
     loc = get_location_data(location_id)
     return loc.get("access_token"), loc.get("refresh_token")
 
-def save_tokens(location_id, access_token, refresh_token):
+def save_tokens(location_id, access_token, refresh_token, company_id=None, user_id=None):
     """Save or update tokens for a specific location."""
     data = {
         "location_id": location_id,
@@ -62,6 +62,10 @@ def save_tokens(location_id, access_token, refresh_token):
         "refresh_token": refresh_token,
         "last_refresh": datetime.now(timezone.utc).isoformat()
     }
+    if company_id:
+        data["companyId"] = company_id
+    if user_id:
+        data["userId"] = user_id
     supabase.table(TABLE_NAME).upsert(data).execute()
 
 def save_location_name(location_id, name):

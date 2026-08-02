@@ -13,13 +13,15 @@ from services.ghl_api import (
 
 from services.supabase import (
     save_tokens,
+    save_location_name,
     get_all_locations_name_id,
     get_location_data,
     token_is_stale
 )
 
 from services.oauth import (
-    exchange_code_for_tokens,
+    exchange_code_for_credentials,
+    get_company_locations,
     refresh_if_needed
 )
 from services.appts_format import (
@@ -134,17 +136,28 @@ def menu():
 @app.route("/oauth/callback")
 def oauth_callback():
     code = request.args.get("code")
+    # Get credentials (tokens, locationId, companyId) from GHL
+    credentials = exchange_code_for_credentials(code)
 
-    # Get locationId + tokens from GH
-    location_id, access, refresh = exchange_code_for_tokens(code)
+    access = credentials.get("accessToken")
+    refresh = credentials.get("refreshToken")
+    location_id = credentials.get("locationId")
+    company_id = credentials.get("companyId")
+    user_id = credentials.get("userId")
 
-    # Save tokens
-    save_tokens(location_id, access, refresh)
+    if location_id:
+        # Single-location install
+        save_tokens(location_id, access, refresh, company_id, user_id)
+        ensure_location_name(location_id)
+        return f"App installed successfully for location: {location_id}"
 
-    # Save location name (fetches from GHL if missing)
-    ensure_location_name(location_id)
+    # Company-level install: save tokens for every accessible location
+    locations = get_company_locations(access)
+    for loc in locations:
+        save_tokens(loc["id"], access, refresh, company_id, user_id)
+        save_location_name(loc["id"], loc["name"])
 
-    return f"App installed successfully for location: {location_id}"
+    return f"App installed successfully for {len(locations)} locations."
 
 @app.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
 @session_required
@@ -320,4 +333,4 @@ def contacts_for_month():
     )
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", debug=True, port=5000)

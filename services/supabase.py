@@ -76,6 +76,53 @@ def save_location_name(location_id, name):
     }
     supabase.table(TABLE_NAME).upsert(data).execute()
 
+def get_user_by_email(email):
+    """Return the user row for a normalized (lowercased) email, or None."""
+    response = supabase.table("users").select("*").eq("email", email.lower()).limit(1).execute()
+    return response.data[0] if response.data else None
+
+def get_allowed_location_ids(user_row):
+    """Return the list of location_ids a user may access."""
+    if user_row.get("is_agency_owner"):
+        loc_response = supabase.table("locations").select("location_id").execute()
+        return [row["location_id"] for row in loc_response.data]
+
+    response = supabase.table("user_locations").select("location_id").eq("user_id", user_row["id"]).execute()
+    return [row["location_id"] for row in response.data]
+
+def set_user_password(user_id, password_hash):
+    """Set a user's password hash."""
+    supabase.table("users").update({"password_hash": password_hash}).eq("id", user_id).execute()
+
+def save_verification_code(email, code, expires_at):
+    """Store a one-time verification code for an email, invalidating old ones."""
+    supabase.table("email_verifications").update({"used": True}).eq("email", email).eq("used", False).execute()
+    supabase.table("email_verifications").insert({
+        "email": email,
+        "code": code,
+        "expires_at": expires_at.isoformat() if hasattr(expires_at, "isoformat") else expires_at,
+    }).execute()
+
+def get_valid_verification_code(email, code):
+    """Return the latest unused, unexpired verification row for an email, or None."""
+    from datetime import datetime, timezone
+    response = (
+        supabase.table("email_verifications")
+        .select("*")
+        .eq("email", email)
+        .eq("code", code)
+        .eq("used", False)
+        .gte("expires_at", datetime.now(timezone.utc).isoformat())
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    return response.data[0] if response.data else None
+
+def mark_verification_used(verification_id):
+    """Mark a verification code as used."""
+    supabase.table("email_verifications").update({"used": True}).eq("id", verification_id).execute()
+
 def token_is_stale(last_refresh):
     """
     Check if the token is older than 24 hours.

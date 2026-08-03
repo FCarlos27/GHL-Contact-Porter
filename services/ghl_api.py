@@ -49,3 +49,28 @@ def fetch_calendar_events(location_id, calendar_id, access_token, start_time, en
 
     return requests.get(url, headers=headers, params=params)
 
+def fetch_ghl_users(access_token, company_id, location_id=None):
+    """
+    Fetch users from GoHighLevel API.
+    company_id is required and passed as the companyId query parameter.
+    If location_id is provided, passes it as a query parameter (locationId).
+    Returns the parsed JSON payload containing the list of users.
+    """
+
+    url = "https://services.leadconnectorhq.com/users/search"
+
+    params = {"companyId": company_id}
+    if location_id:
+        params["locationId"] = location_id
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Version": "v3",
+        "Accept": "application/json"
+    }
+
+    response = requests.get(url, headers=headers, params=params)
+    response.raise_for_status()
+
+    return response.json()
+

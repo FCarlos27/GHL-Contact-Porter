@@ -76,6 +76,10 @@ def save_location_name(location_id, name):
     }
     supabase.table(TABLE_NAME).upsert(data).execute()
 
+def save_sheet_id(location_id, sheet_id):
+    """Save the Google Sheets id for a specific location."""
+    supabase.table(TABLE_NAME).update({"sheet_id": sheet_id}).eq("location_id", location_id).execute()
+
 def get_user_by_email(email):
     """Return the user row for a normalized (lowercased) email, or None."""
     response = supabase.table("users").select("*").eq("email", email.lower()).limit(1).execute()

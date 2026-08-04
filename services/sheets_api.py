@@ -1,16 +1,27 @@
+import base64
+import json
 import os
+from pathlib import Path
 import gspread
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
+from dotenv import load_dotenv
 from utils.formatting import format_us_phone
 from google.oauth2.service_account import Credentials
 
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
+
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-creds = Credentials.from_service_account_file(
-    os.path.join("utils", "credentials.json"),
-    scopes=scopes
-)
+
+def _build_credentials():
+    encoded = os.getenv("GOOGLE_CREDENTIALS_JSON_B64")
+    if not encoded:
+        raise RuntimeError("GOOGLE_CREDENTIALS_JSON_B64 is not set in .env")
+    info = json.loads(base64.b64decode(encoded).decode("utf-8"))
+    return Credentials.from_service_account_info(info, scopes=scopes)
+
+creds = _build_credentials()
 gspread_client = gspread.authorize(creds)
 
 def get_location_sheet(sheet_id: str) -> gspread.Spreadsheet:

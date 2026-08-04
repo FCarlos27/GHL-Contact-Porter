@@ -1,5 +1,15 @@
+import re
 import time
 from googleapiclient.errors import HttpError
+
+SHEET_ID_PATTERN = re.compile(r"/spreadsheets/d/([a-zA-Z0-9-_]+)")
+
+def extract_sheet_id(url):
+    """Extract the spreadsheet ID from a Google Sheets link, or None."""
+    if not url:
+        return None
+    match = SHEET_ID_PATTERN.search(url)
+    return match.group(1) if match else None
 
 def safe_google_call(func, *args, max_retries=3, **kwargs):
     """Wraps Google API calls in an exponential backoff retry loop."""

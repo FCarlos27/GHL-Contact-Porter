@@ -5,6 +5,7 @@ from flask import Blueprint, request, render_template, session, flash, redirect
 from routes.common import session_required, login_required, GLOBAL_TZ_MAP, REGIONS
 from services.ghl_api import fetch_calendar_events
 from services.appts_format import extract_contacts_scheduled
+from services.supabase import save_sheet_id
 from services.sheets_api import (
     insert_day_contacts,
     insert_month_contacts,
@@ -12,9 +13,39 @@ from services.sheets_api import (
     fetch_worksheets
 )
 from utils.formatting import normalize_date, compute_time_range
-from utils.helpers import safe_google_call
+from utils.helpers import safe_google_call, extract_sheet_id
 
 contacts_bp = Blueprint("contacts", __name__)
+
+
+def _get_sheet_or_setup(next_url):
+    """Return (sheet, None) if a sheet is linked, else (None, redirect) to sheet setup."""
+    sheet_id = session.get("sheet_id")
+    if not sheet_id:
+        flash("No Google Sheet is linked to this location yet. Please add it.", "warning")
+        return None, redirect(f"/contacts/sheet-setup?next={next_url}")
+    return get_location_sheet(sheet_id), None
+
+
+@contacts_bp.route("/contacts/sheet-setup", methods=["GET", "POST"])
+@login_required
+@session_required
+def sheet_setup():
+    if request.method == "POST":
+        link = (request.form.get("sheet_link") or "").strip()
+        sheet_id = extract_sheet_id(link)
+        if not sheet_id:
+            flash("Could not find a spreadsheet ID in that link. Please paste the full Google Sheets URL.", "danger")
+            return redirect("/contacts/sheet-setup")
+
+        save_sheet_id(session["location_id"], sheet_id)
+        session["sheet_id"] = sheet_id
+        flash("Google Sheet linked successfully.", "success")
+
+        next_url = request.args.get("next") or "/contacts/sheet-setup"
+        return redirect(next_url)
+
+    return render_template("sheet_setup.html")
 
 
 @contacts_bp.route("/contacts/insert-in-sheet/day", methods=["GET", "POST"])
@@ -33,9 +64,13 @@ def contacts_for_day():
         session["tz_zone"] = request.form.get("zone")
         return redirect("/contacts/insert-in-sheet/day")
 
+    # --- Require a linked Google Sheet ---
+    _, response = _get_sheet_or_setup("/contacts/insert-in-sheet/day")
+    if response:
+        return response
+
     # --- Setup & Caching ---
-    sheet_id = session.get("sheet_id")
-    sheet = get_location_sheet(sheet_id)
+    sheet = get_location_sheet(session["sheet_id"])
 
     # Cache worksheet titles in the session
     if "ws_titles" not in session:
@@ -120,8 +155,12 @@ def contacts_for_day():
 @login_required
 @session_required
 def contacts_for_month():
-    sheet_id = session.get("sheet_id")
-    sheet = get_location_sheet(sheet_id)
+    # --- Require a linked Google Sheet ---
+    _, response = _get_sheet_or_setup("/contacts/insert-in-sheet/month")
+    if response:
+        return response
+
+    sheet = get_location_sheet(session["sheet_id"])
 
     if "ws_titles" not in session:
         worksheets = fetch_worksheets(sheet)

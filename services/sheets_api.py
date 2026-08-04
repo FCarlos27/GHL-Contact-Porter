@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List
 from dotenv import load_dotenv
-from utils.formatting import format_us_phone
+from utils.helpers import format_us_phone, parse_date_value, format_date_key
 from google.oauth2.service_account import Credentials
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
@@ -35,7 +35,7 @@ def fetch_worksheets(sheet: gspread.Spreadsheet):
 def insert_month_contacts(
     worksheet: gspread.Worksheet,
     contacts: List[Dict[str, str]]
-) -> List[int]:
+) -> List[List]:
     """
     Insert contacts into the worksheet grouped by date (MM/DD/YYYY).
 
@@ -48,7 +48,7 @@ def insert_month_contacts(
         contacts: List of contact dicts containing a "date" key.
 
     Returns:
-        List of inserted row indices.
+        List of inserted row values.
     """
     inserted_rows = []
     inserted_contacts = already_inserted_for_date(worksheet)
@@ -84,7 +84,7 @@ def insert_day_contacts(
     date: str,
     contacts: List[Dict[str, str]],
     inserted_contacts: dict[str, set[str]] | None = None
-) -> List[int]:
+) -> List[List]:
     """
     Insert contacts for a specific date into the worksheet.
 
@@ -151,9 +151,8 @@ def find_insertion_row(ws: gspread.Worksheet, target_date: str) -> tuple[int, bo
     target_date = datetime.strptime(target_date, "%m/%d/%Y").date()
 
     for i, value in enumerate(dates):
-        try:
-            current_dt = datetime.strptime(value, "%m/%d/%Y").date()
-        except:
+        current_dt = parse_date_value(value)
+        if current_dt is None:
             continue
 
         if current_dt == target_date:
@@ -179,14 +178,19 @@ def already_inserted_for_date(ws: gspread.Worksheet) -> dict[str, set[str]]:
     }
     """
     dates = ws.col_values(4)   # column D
-    phones = ws.col_values(2) # column B
+    phones = ws.col_values(2)  # column B
 
     result = defaultdict(set)
 
     for d, p in zip(dates, phones):
         if not d or not p:
             continue
-        result[d].add(p.strip())
+
+        date_key = format_date_key(d)
+        if date_key is None:
+            continue
+
+        result[date_key].add(p.strip())
 
     return dict(result)
 

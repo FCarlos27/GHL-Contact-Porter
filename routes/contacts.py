@@ -12,8 +12,7 @@ from services.sheets_api import (
     get_location_sheet,
     fetch_worksheets
 )
-from utils.formatting import normalize_date, compute_time_range
-from utils.helpers import safe_google_call, extract_sheet_id
+from utils.helpers import normalize_date, compute_time_range, safe_google_call, extract_sheet_id
 
 contacts_bp = Blueprint("contacts", __name__)
 

@@ -8,7 +8,7 @@ from services.supabase import (
     get_valid_verification_code,
     mark_verification_used,
 )
-from utils.verification import issue_verification_code
+from utils.helpers import issue_verification_code
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 

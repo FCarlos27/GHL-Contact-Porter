@@ -2,7 +2,7 @@ from functools import wraps
 
 from flask import session, flash, redirect
 
-from utils.formatting import build_timezone_map
+from utils.helpers import build_timezone_map
 
 GLOBAL_TZ_MAP = build_timezone_map()
 REGIONS = list(GLOBAL_TZ_MAP.keys())

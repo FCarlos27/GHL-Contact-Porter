@@ -9,21 +9,13 @@ from services.supabase import (
     token_is_stale,
     get_user_by_email,
     set_user_password,
+    get_valid_verification_code,
+    mark_verification_used,
 )
 from services.oauth import refresh_if_needed
 from services.ghl_api import fetch_calendar_events
 from services.appts_format import create_appointments_html
-from utils.formatting import compute_time_range
-from utils.verification import issue_verification_code
-from services.supabase import (
-    get_all_locations_name_id,
-    get_location_data,
-    token_is_stale,
-    get_user_by_email,
-    set_user_password,
-    get_valid_verification_code,
-    mark_verification_used,
-)
+from utils.helpers import compute_time_range, issue_verification_code
 from routes.common import session_required, login_required
 
 main_bp = Blueprint("main", __name__)

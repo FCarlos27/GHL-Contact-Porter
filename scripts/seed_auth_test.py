@@ -7,10 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from services.supabase import supabase, get_user_by_email
 from app import app
 
-import utils.verification as verification
+import utils.helpers as helpers
 
 # Prevent real email delivery during tests; the code is read from the DB instead.
-verification.send_verification_email = lambda to, code: print(f"[mock] emailed verification code {code} to {to}")
+helpers.send_verification_email = lambda to, code: print(f"[mock] emailed verification code {code} to {to}")
 
 TEST_EMAIL = "test@example.com"
 TEST_PASSWORD = "testpass123"

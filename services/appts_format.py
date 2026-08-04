@@ -1,5 +1,5 @@
 import re
-from utils.formatting import normalize_date
+from utils.helpers import normalize_date
 
 def create_appointments_html(json_data):
     """Return a clean list of appointment objects ready for rendering."""
